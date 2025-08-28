@@ -1,0 +1,55 @@
+name: ETL
+
+on:
+  schedule:
+    - cron: '30 5 * * *' # daily at 05:30 UTC
+  push:
+    paths:
+      - 'etl/**'
+      - '.github/workflows/etl.yml'
+  workflow_dispatch:
+    inputs:
+      window_days:
+        description: 'Incidents window (days)'
+        required: false
+        default: '7'
+      backfill:
+        description: 'Backfill mode (true/false)'
+        required: false
+        default: 'false'
+      backfill_start:
+        description: 'Backfill start date (YYYY-MM-DD)'
+        required: false
+        default: ''
+
+concurrency:
+  group: etl
+  cancel-in-progress: false
+
+jobs:
+  run-etl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r etl/requirements.txt
+
+      - name: Run ETL
+        env:
+          PG_DSN: ${{ secrets.PG_DSN }}
+          ETL_CONFIG: etl/config.yaml
+          ETL_WINDOW_DAYS: ${{ inputs.window_days || '7' }}
+          ETL_BACKFILL: ${{ inputs.backfill || 'false' }}
+          ETL_BACKFILL_START: ${{ inputs.backfill_start || '' }}
+        run: |
+          python -m etl.main

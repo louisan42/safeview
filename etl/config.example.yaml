@@ -1,0 +1,21 @@
+# Copy to config.yaml and fill in secrets
+pg_dsn: postgresql://user:pass@localhost:5432/safetyview
+
+services:
+  robbery: https://services.arcgis.com/S9th0jAJ7bqgIRjw/arcgis/rest/services/Robbery_Open_Data/FeatureServer/0/query
+  theft_over: https://services.arcgis.com/S9th0jAJ7bqgIRjw/arcgis/rest/services/Theft_Over_Open_Data/FeatureServer/0/query
+  break_and_enter: https://services.arcgis.com/S9th0jAJ7bqgIRjw/arcgis/rest/services/Break_and_Enter_Open_Data/FeatureServer/0/query
+
+neighbourhoods:
+  url: https://services3.arcgis.com/b9WvedVPoizGfvfD/arcgis/rest/services/COTGEO_CENSUS_NEIGHBORHOOD/FeatureServer/0/query
+  fields: AREA_LONG_CODE,AREA_SHORT_CODE,AREA_NAME
+
+etl:
+  incidents_window_days: 7
+  batch_size: 2000
+  max_retries: 4
+  retry_backoff_seconds: 2
+  # Backfill mode: when true, ignores window and loads all data (or from backfill_start if provided)
+  backfill: false
+  # Optional: YYYY-MM-DD start date for backfill cutoff (UTC midnight)
+  backfill_start: 
