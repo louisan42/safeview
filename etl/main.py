@@ -4,6 +4,7 @@ import yaml
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from time import perf_counter
+from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 
 from etl.db import connect, ensure_tables, copy_incidents_csv, post_load_cleanup, upsert_neighbourhoods
 from etl.transform import fetch_paginated, build_incidents_csv, fetch_neighbourhoods_geojson
@@ -94,6 +95,37 @@ def run():
     cfg = load_config()
     # Allow PG_DSN env override
     pg_dsn = os.getenv('PG_DSN') or cfg['pg_dsn']
+    # Diagnostics: parse DSN to log host/port/dbname/sslmode without secrets
+    def _redact_dsn_info(dsn: str) -> dict:
+        try:
+            u = urlparse(dsn)
+            q = parse_qs(u.query)
+            return {
+                'scheme': u.scheme,
+                'host': u.hostname,
+                'port': u.port,
+                'dbname': (u.path.lstrip('/') if u.path else None),
+                'sslmode': (q.get('sslmode', [''])[0] or None),
+            }
+        except Exception:
+            return {'scheme': None, 'host': None, 'port': None, 'dbname': None, 'sslmode': None}
+
+    info = _redact_dsn_info(pg_dsn)
+    print(f"[ETL] DB target host={info.get('host')} port={info.get('port')} db={info.get('dbname')} sslmode={info.get('sslmode')}")
+
+    # In CI, enforce sslmode=require if missing in URL-style DSN
+    if os.getenv('GITHUB_ACTIONS', '').lower() == 'true':
+        try:
+            u = urlparse(pg_dsn)
+            if u.scheme and u.hostname:
+                q = parse_qs(u.query)
+                if 'sslmode' not in q or not q['sslmode']:
+                    q['sslmode'] = ['require']
+                    new_query = urlencode(q, doseq=True)
+                    pg_dsn = urlunparse((u.scheme, u.netloc, u.path, u.params, new_query, u.fragment))
+                    print("[ETL] Added sslmode=require for CI connection.")
+        except Exception:
+            pass
     services = cfg['services']
     nbhd_cfg = cfg.get('neighbourhoods', {})
     etl = cfg.get('etl', {})
