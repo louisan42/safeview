@@ -33,34 +33,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Validate PG_DSN secret
-        env:
-          PG_DSN: ${{ secrets.PG_DSN }}
-        run: |
-          if [ -z "${PG_DSN}" ]; then
-            echo "PG_DSN secret is missing. Add it in GitHub -> Settings -> Secrets and variables -> Actions." >&2
-            exit 1
-          fi
-          python - <<'PY'
-            import sys
-            import os
-            from urllib.parse import urlparse
-            pg = os.environ.get('PG_DSN','')
-            try:
-                u = urlparse(pg)
-                host = u.hostname
-            except Exception:
-                host = None
-            if not host:
-                print('PG_DSN appears invalid or missing a hostname. Provide a URL-style DSN.', file=sys.stderr)
-                sys.exit(1)
-            if host in {'localhost', '127.0.0.1', '::1'}:
-                print('PG_DSN points to localhost, which is not reachable in GitHub Actions. Use your remote DB host (e.g., Supabase).', file=sys.stderr)
-                sys.exit(1)
-            print(f"PG_DSN host validated: {host}")
-          PY
-
+        
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
