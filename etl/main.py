@@ -11,12 +11,52 @@ from etl.transform import fetch_paginated, build_incidents_csv, fetch_neighbourh
 FIELDS = 'EVENT_UNIQUE_ID,REPORT_DATE,OCC_DATE,OFFENCE,MCI_CATEGORY,HOOD_158,LONG_WGS84,LAT_WGS84'
 
 def load_config() -> dict:
-    # Allow ETL_CONFIG env var, else default to etl/config.yaml next to this file
+    # Prefer ETL_CONFIG, else try etl/config.yaml next to this file
     cfg_path = os.getenv('ETL_CONFIG') or str(Path(__file__).with_name('config.yaml'))
-    if not os.path.exists(cfg_path):
-        raise FileNotFoundError(f"Config not found: {cfg_path}. Copy etl/config.example.yaml to etl/config.yaml and edit.")
-    with open(cfg_path, 'r') as f:
-        cfg = yaml.safe_load(f)
+    cfg: dict | None = None
+    if os.path.exists(cfg_path):
+        with open(cfg_path, 'r') as f:
+            cfg = yaml.safe_load(f)
+    else:
+        # Try example config if present
+        example_path = Path(__file__).with_name('config.example.yaml')
+        if example_path.exists():
+            with open(example_path, 'r') as f:
+                cfg = yaml.safe_load(f)
+        else:
+            cfg = None
+    # If no file available, build minimal defaults requiring PG_DSN
+    if cfg is None:
+        pg_dsn_env = os.getenv('PG_DSN')
+        if not pg_dsn_env:
+            raise FileNotFoundError(
+                f"Config not found: {cfg_path}. Set PG_DSN env or add etl/config.yaml (see etl/config.example.yaml)."
+            )
+        cfg = {
+            'pg_dsn': pg_dsn_env,
+            'services': {
+                'robbery': 'https://services.arcgis.com/S9th0jAJ7bqgIRjw/arcgis/rest/services/Robbery_Open_Data/FeatureServer/0/query',
+                'theft_over': 'https://services.arcgis.com/S9th0jAJ7bqgIRjw/arcgis/rest/services/Theft_Over_Open_Data/FeatureServer/0/query',
+                'break_and_enter': 'https://services.arcgis.com/S9th0jAJ7bqgIRjw/arcgis/rest/services/Break_and_Enter_Open_Data/FeatureServer/0/query',
+            },
+            'neighbourhoods': {
+                'url': 'https://services3.arcgis.com/b9WvedVPoizGfvfD/arcgis/rest/services/COTGEO_CENSUS_NEIGHBORHOOD/FeatureServer/0/query',
+                'fields': 'AREA_LONG_CODE,AREA_SHORT_CODE,AREA_NAME',
+            },
+            'etl': {
+                'incidents_window_days': 7,
+                'batch_size': 2000,
+                'max_retries': 4,
+                'retry_backoff_seconds': 2,
+                'backfill': False,
+            },
+        }
+    # Ensure pg_dsn present; allow PG_DSN env to override
+    if os.getenv('PG_DSN'):
+        cfg['pg_dsn'] = os.getenv('PG_DSN')
+    if 'pg_dsn' not in cfg or not cfg['pg_dsn']:
+        raise FileNotFoundError("pg_dsn missing. Provide PG_DSN env or set in config.yaml.")
+
     # Env overrides for CI
     etl_env = cfg.get('etl', {}) or {}
     if os.getenv('ETL_WINDOW_DAYS'):

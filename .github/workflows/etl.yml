@@ -47,7 +47,6 @@ jobs:
       - name: Run ETL
         env:
           PG_DSN: ${{ secrets.PG_DSN }}
-          ETL_CONFIG: etl/config.yaml
           ETL_WINDOW_DAYS: ${{ inputs.window_days || '7' }}
           ETL_BACKFILL: ${{ inputs.backfill || 'false' }}
           ETL_BACKFILL_START: ${{ inputs.backfill_start || '' }}
