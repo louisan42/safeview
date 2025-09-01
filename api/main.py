@@ -1,0 +1,43 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from .routers.health import router as health_router
+from .routers.incidents import router as incidents_router
+from .routers.neighbourhoods import router as neighbourhoods_router
+
+app = FastAPI(
+    title="SafetyView API",
+    version="0.1.0",
+    description=(
+        "Open, city-agnostic crime and safety analytics API. "
+        "Provides incidents, regions, and analytics endpoints (per-capita, hotspots, anomalies, safety index)."
+    ),
+    contact={
+        "name": "SafetyView",
+        "url": "https://github.com/louisan42/safeview",
+    },
+    license_info={
+        "name": "MIT License",
+        "url": "https://opensource.org/license/mit",
+    },
+    terms_of_service="https://github.com/louisan42/safeview/blob/main/LICENSE",
+)
+
+# CORS: permissive for now; tighten in deployment
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(health_router, prefix="/v1")
+app.include_router(incidents_router, prefix="/v1")
+app.include_router(neighbourhoods_router, prefix="/v1")
+
+
+# For `python -m api.main`
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("api.main:app", host="0.0.0.0", port=8000, reload=True)
