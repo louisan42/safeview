@@ -8,6 +8,12 @@ A small ETL that ingests Toronto Police Service incidents and City of Toronto ne
 - `etl/db.py` – schema, copy/upsert, post-load cleanup
 - `etl/config.example.yaml` – template for local config (do NOT commit secrets)
 - `.github/workflows/etl.yml` – CI to run nightly and on changes
+- `api/` – FastAPI-based backend (city-agnostic), OpenAPI/Swagger built-in
+  - `api/main.py` – app, OpenAPI metadata
+  - `api/routers/` – `/v1/health`, `/v1/incidents`, `/v1/neighbourhoods`
+  - `api/requirements.txt` – API deps
+  - `api/requirements-dev.txt` – test deps (pytest)
+  - `.github/workflows/api-tests.yml` – API unit tests in CI
 
 ## Local Setup
 1. Python 3.13 (recommended)
@@ -41,6 +47,10 @@ A small ETL that ingests Toronto Police Service incidents and City of Toronto ne
   - `PG_DSN` – your Postgres connection string (e.g., Supabase direct connection)
 - Manual run: GitHub → Actions → ETL → Run workflow (optionally set window/backfill inputs)
 
+### API Tests CI
+- Workflow: `.github/workflows/api-tests.yml`
+- Runs pytest on `api/tests/**` for pushes/PRs that touch `api/**`.
+
 ## Analytics Views
 - The ETL creates helpful SQL views during `ensure_tables()` in `etl/db.py`:
   - `v_incidents_daily(day, dataset, cnt)` – daily counts per dataset.
@@ -62,6 +72,33 @@ Open http://127.0.0.1:8000 to see totals and daily counts.
 API endpoints:
 - `GET /api/health` – basic DB connectivity check
 - `GET /api/summary` – totals, by-dataset counts, and last 30 days daily counts
+
+## API (FastAPI)
+Run the API locally (Swagger UI at `/docs`):
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r api/requirements.txt
+export PG_DSN="postgresql://user:pass@host:5432/db?sslmode=require"
+uvicorn api.main:app --reload --port 8000
+```
+
+Test in browser:
+- OpenAPI schema: http://127.0.0.1:8000/openapi.json
+- Swagger UI: http://127.0.0.1:8000/docs
+- ReDoc: http://127.0.0.1:8000/redoc
+- Health: http://127.0.0.1:8000/v1/health
+- Neighbourhoods: http://127.0.0.1:8000/v1/neighbourhoods
+- Incidents (example): http://127.0.0.1:8000/v1/incidents?dataset=robbery&limit=10
+
+## Running API tests locally
+Unit tests do not require a live DB (health is mocked):
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r api/requirements.txt -r api/requirements-dev.txt
+pytest -q api/tests
+```
+
+To run integration tests later (with DB), we will add a Postgres service in CI and local docker-compose; for now unit tests cover OpenAPI and basic health.
 
 ## Notes
 - Do NOT commit secrets. `etl/config.yaml` is ignored via `.gitignore`. Use `etl/config.example.yaml` for templates.
