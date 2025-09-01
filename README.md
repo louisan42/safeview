@@ -41,6 +41,28 @@ A small ETL that ingests Toronto Police Service incidents and City of Toronto ne
   - `PG_DSN` – your Postgres connection string (e.g., Supabase direct connection)
 - Manual run: GitHub → Actions → ETL → Run workflow (optionally set window/backfill inputs)
 
+## Analytics Views
+- The ETL creates helpful SQL views during `ensure_tables()` in `etl/db.py`:
+  - `v_incidents_daily(day, dataset, cnt)` – daily counts per dataset.
+  - `v_incidents_by_neighbourhood(dataset, hood_158, cnt)` – counts per neighbourhood code.
+  - `v_incidents_last_30d` – convenience view filtering last 30 days.
+
+## Demo Dashboard (for testing DB only)
+This is a minimal FastAPI app to verify the database is populated. Not for production.
+
+Run locally:
+```bash
+pip install -r etl/requirements.txt
+PG_DSN="postgresql://user:pass@host:5432/db?sslmode=require" \
+uvicorn etl.demo_dashboard:app --reload --port 8000
+```
+
+Open http://127.0.0.1:8000 to see totals and daily counts.
+
+API endpoints:
+- `GET /api/health` – basic DB connectivity check
+- `GET /api/summary` – totals, by-dataset counts, and last 30 days daily counts
+
 ## Notes
 - Do NOT commit secrets. `etl/config.yaml` is ignored via `.gitignore`. Use `etl/config.example.yaml` for templates.
 - PostGIS must be enabled in the target DB (on Supabase: `create extension if not exists postgis;`).

@@ -157,6 +157,7 @@ def run():
             text = buf.getvalue()
             if text == '':
                 print(f"[ETL] No rows for {dataset} (window_days={window_days}, backfill={bool(etl.get('backfill', False))}).")
+                totals["datasets"][dataset] = {"rows": 0, "seconds": 0}
                 continue
             row_count = text.count('\n') if text else 0
             copy_incidents_csv(conn, buf)
@@ -199,6 +200,33 @@ def run():
         for ds, m in totals["datasets"].items():
             print(f"  - {ds}: rows={m['rows']}, time={m['seconds']}s")
         print(f"  Total incident rows processed: {totals['inserted']}")
+
+        # Data quality checks
+        hard_fail = False
+        if totals["inserted"] == 0:
+            print("[ETL][error] No incident rows processed. Failing the job.")
+            hard_fail = True
+        else:
+            # Warn if any dataset is empty in incremental mode
+            empty_ds = [ds for ds, m in totals["datasets"].items() if m["rows"] == 0]
+            if empty_ds and not bool(etl.get('backfill', False)):
+                print(f"[ETL][warn] Datasets with zero rows this run: {', '.join(empty_ds)}")
+
+        # GitHub Step Summary (if available)
+        step_summary = os.getenv('GITHUB_STEP_SUMMARY')
+        if step_summary:
+            try:
+                with open(step_summary, 'a') as f:
+                    f.write("\n\n## ETL Summary\n\n")
+                    f.write("| Dataset | Rows | Seconds |\n|---|---:|---:|\n")
+                    for ds, m in totals["datasets"].items():
+                        f.write(f"| {ds} | {m['rows']} | {m['seconds']} |\n")
+                    f.write(f"\n**Total incident rows processed:** {totals['inserted']}\n")
+            except Exception as e:
+                print(f"[ETL][warn] Could not write step summary: {e}")
+
+        if hard_fail:
+            raise SystemExit(2)
     finally:
         conn.close()
 

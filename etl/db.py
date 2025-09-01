@@ -34,6 +34,30 @@ CREATE INDEX IF NOT EXISTS idx_tps_incidents_report_date ON tps_incidents (repor
 CREATE UNIQUE INDEX IF NOT EXISTS ux_tps_incidents_dataset_euid ON tps_incidents (dataset, event_unique_id);
 """
 
+DDL_ANALYTICS_VIEWS = """
+CREATE OR REPLACE VIEW v_incidents_daily with (security_barrier = 'on') AS
+SELECT
+  date_trunc('day', report_date) AS day,
+  dataset,
+  COUNT(*) AS cnt
+FROM tps_incidents
+WHERE report_date IS NOT NULL
+GROUP BY 1,2;
+
+CREATE OR REPLACE VIEW v_incidents_by_neighbourhood with (security_barrier = 'on') AS
+SELECT
+  dataset,
+  hood_158,
+  COUNT(*) AS cnt
+FROM tps_incidents
+GROUP BY 1,2;
+
+CREATE OR REPLACE VIEW v_incidents_last_30d with (security_barrier = 'on') AS
+SELECT *
+FROM tps_incidents
+WHERE report_date >= now() - interval '30 days';
+"""
+
 POST_LOAD_SQL = """
 -- set geom for rows lacking geometry
 UPDATE tps_incidents SET geom = ST_SetSRID(ST_MakePoint(lon,lat),4326) WHERE geom IS NULL AND lon IS NOT NULL AND lat IS NOT NULL;
@@ -60,6 +84,11 @@ def ensure_tables(conn):
             print(f"[ETL][warn] Skipping CREATE EXTENSION postgis (permission or already installed): {e}")
         cur.execute(DDL_NEIGHBOURHOODS)
         cur.execute(DDL_INCIDENTS)
+        # Create/refresh analytics views
+        try:
+            cur.execute(DDL_ANALYTICS_VIEWS)
+        except Exception as e:
+            print(f"[ETL][warn] Skipping analytics views creation: {e}")
     conn.commit()
 
 
