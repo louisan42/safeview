@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, HTTPException
 from pydantic import BaseModel, Field
 
 from ..db import cursor
@@ -28,10 +28,18 @@ def _fc(features: List[Dict[str, Any]]):
     return {"type": "FeatureCollection", "features": features}
 
 
-@router.get("", response_model=FeatureCollection)
+class ErrorResponse(BaseModel):
+    detail: str
+
+
+@router.get(
+    "",
+    response_model=FeatureCollection,
+    responses={422: {"model": ErrorResponse, "description": "Validation error"}},
+)
 async def list_neighbourhoods(
-    code: Optional[str] = Query(None, description="Filter by area_long_code or area_short_code"),
-    bbox: Optional[str] = Query(None, description="minLon,minLat,maxLon,maxLat"),
+    code: Optional[str] = Query(None, description="Filter by area_long_code or area_short_code", examples={"sample": {"value": "001"}}),
+    bbox: Optional[str] = Query(None, description="minLon,minLat,maxLon,maxLat", examples={"sample": {"value": "-79.6,43.6,-79.3,43.8"}}),
 ):
     where = ["1=1"]
     params: List[Any] = []
@@ -41,12 +49,17 @@ async def list_neighbourhoods(
         params.extend([code, code])
 
     if bbox:
+        parts = bbox.split(",")
+        if len(parts) != 4:
+            raise HTTPException(status_code=422, detail="bbox must be 'minLon,minLat,maxLon,maxLat'")
         try:
-            minx, miny, maxx, maxy = [float(x) for x in bbox.split(",")]
-            where.append("ST_Intersects(geom, ST_MakeEnvelope(%s,%s,%s,%s,4326))")
-            params.extend([minx, miny, maxx, maxy])
-        except Exception:
-            pass
+            minx, miny, maxx, maxy = [float(x) for x in parts]
+        except ValueError:
+            raise HTTPException(status_code=422, detail="bbox coordinates must be numbers")
+        if minx >= maxx or miny >= maxy:
+            raise HTTPException(status_code=422, detail="bbox must have min < max for both lon and lat")
+        where.append("ST_Intersects(geom, ST_MakeEnvelope(%s,%s,%s,%s,4326))")
+        params.extend([minx, miny, maxx, maxy])
 
     where_sql = " AND ".join(where)
 

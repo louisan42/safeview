@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, HTTPException
 from pydantic import BaseModel, Field
 
 from ..db import cursor
@@ -32,6 +32,10 @@ class BBox(BaseModel):
     max_lat: float
 
 
+class ErrorResponse(BaseModel):
+    detail: str
+
+
 def _to_geojson(features: List[Dict[str, Any]]) -> Dict[str, Any]:
     return {
         "type": "FeatureCollection",
@@ -46,15 +50,23 @@ def _to_geojson(features: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-@router.get("", response_model=FeatureCollection)
+@router.get(
+    "",
+    response_model=FeatureCollection,
+    responses={422: {"model": ErrorResponse, "description": "Validation error"}},
+)
 async def list_incidents(
-    dataset: Optional[str] = Query(None, description="robbery|theft_over|break_and_enter or other dataset tags"),
-    date_from: Optional[datetime] = Query(None),
-    date_to: Optional[datetime] = Query(None),
-    hood: Optional[str] = Query(None, description="Neighbourhood code"),
-    bbox: Optional[str] = Query(None, description="minLon,minLat,maxLon,maxLat"),
-    limit: int = Query(500, ge=1, le=5000),
-    offset: int = Query(0, ge=0),
+    dataset: Optional[str] = Query(
+        None,
+        description="robbery|theft_over|break_and_enter or other dataset tags",
+        examples={"sample": {"value": "robbery"}},
+    ),
+    date_from: Optional[datetime] = Query(None, examples={"sample": {"value": "2025-01-01"}}),
+    date_to: Optional[datetime] = Query(None, examples={"sample": {"value": "2025-01-31"}}),
+    hood: Optional[str] = Query(None, description="Neighbourhood code", examples={"sample": {"value": "001"}}),
+    bbox: Optional[str] = Query(None, description="minLon,minLat,maxLon,maxLat", examples={"sample": {"value": "-79.6,43.6,-79.3,43.8"}}),
+    limit: int = Query(500, ge=1, le=5000, examples={"sample": {"value": 100}}),
+    offset: int = Query(0, ge=0, examples={"sample": {"value": 0}}),
     as_geojson: bool = Query(True),
 ):
     where = ["1=1"]
@@ -69,18 +81,26 @@ async def list_incidents(
     if date_to:
         where.append("report_date <= %s")
         params.append(date_to)
+    # Validate date range
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(status_code=422, detail="date_from cannot be after date_to")
     if hood:
         where.append("hood_158 = %s")
         params.append(hood)
 
     bbox_sql = None
     if bbox:
+        parts = bbox.split(",")
+        if len(parts) != 4:
+            raise HTTPException(status_code=422, detail="bbox must be 'minLon,minLat,maxLon,maxLat'")
         try:
-            minx, miny, maxx, maxy = [float(x) for x in bbox.split(",")]
-            bbox_sql = "ST_Intersects(geom, ST_MakeEnvelope(%s,%s,%s,%s,4326))"
-            params.extend([minx, miny, maxx, maxy])
-        except Exception:
-            pass
+            minx, miny, maxx, maxy = [float(x) for x in parts]
+        except ValueError:
+            raise HTTPException(status_code=422, detail="bbox coordinates must be numbers")
+        if minx >= maxx or miny >= maxy:
+            raise HTTPException(status_code=422, detail="bbox must have min < max for both lon and lat")
+        bbox_sql = "ST_Intersects(geom, ST_MakeEnvelope(%s,%s,%s,%s,4326))"
+        params.extend([minx, miny, maxx, maxy])
 
     if bbox_sql:
         where.append(bbox_sql)
