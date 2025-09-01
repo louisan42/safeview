@@ -10,6 +10,7 @@ router = APIRouter(prefix="/incidents", tags=["incidents"])
 
 
 class GeoJSONGeometry(BaseModel):
+    """GeoJSON geometry object (supports Point/Polygon/etc.)."""
     type: str
     coordinates: Any
 
@@ -53,7 +54,35 @@ def _to_geojson(features: List[Dict[str, Any]]) -> Dict[str, Any]:
 @router.get(
     "",
     response_model=FeatureCollection,
-    responses={422: {"model": ErrorResponse, "description": "Validation error"}},
+    responses={
+        200: {
+            "description": "GeoJSON FeatureCollection of incidents",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "sample": {
+                            "value": {
+                                "type": "FeatureCollection",
+                                "features": [
+                                    {
+                                        "type": "Feature",
+                                        "geometry": {"type": "Point", "coordinates": [-79.4, 43.7]},
+                                        "properties": {
+                                            "id": 123,
+                                            "dataset": "robbery",
+                                            "report_date": "2025-01-01T00:00:00Z",
+                                            "hood_158": "001"
+                                        },
+                                    }
+                                ],
+                            }
+                        }
+                    }
+                }
+            },
+        },
+        422: {"model": ErrorResponse, "description": "Validation error"},
+    },
 )
 async def list_incidents(
     dataset: Optional[str] = Query(
