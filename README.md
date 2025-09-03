@@ -49,7 +49,9 @@ A small ETL that ingests Toronto Police Service incidents and City of Toronto ne
 
 ### API Tests CI
 - Workflow: `.github/workflows/api-tests.yml`
-- Runs pytest on `api/tests/**` for pushes/PRs that touch `api/**`.
+- Jobs:
+  - `test`: unit tests (no DB).
+  - `integration`: spins up PostGIS service, initializes schema/seed, runs tests marked `integration`.
 
 ## Analytics Views
 - The ETL creates helpful SQL views during `ensure_tables()` in `etl/db.py`:
@@ -98,7 +100,28 @@ pip install -r api/requirements.txt -r api/requirements-dev.txt
 pytest -q api/tests
 ```
 
-To run integration tests later (with DB), we will add a Postgres service in CI and local docker-compose; for now unit tests cover OpenAPI and basic health.
+### Local PostGIS with docker compose (for integration tests)
+Spin up a local PostGIS and seed minimal data:
+
+```bash
+# Optional: override port (defaults to 55432)
+PG_PORT=55432 docker compose up -d db
+
+# Set DSN for the API/tests
+export PG_DSN=postgresql://sv:sv@localhost:${PG_PORT:-55432}/sv
+
+# The container auto-runs init SQL from db/init/*.sql on first start.
+```
+
+Run integration tests (requires PG_DSN):
+
+```bash
+pytest -q -m integration api/tests
+```
+
+Notes:
+- On Apple Silicon, no platform flag is required; Docker will emulate if needed.
+- The compose file exposes the DB on a high port to avoid local conflicts.
 
 ## Notes
 - Do NOT commit secrets. `etl/config.yaml` is ignored via `.gitignore`. Use `etl/config.example.yaml` for templates.

@@ -55,6 +55,7 @@ def _to_geojson(features: List[Dict[str, Any]]) -> Dict[str, Any]:
 @router.get(
     "",
     response_model=FeatureCollection,
+    summary="List incidents with filters, sorting, pagination, and GeoJSON output",
     responses={
         200: {
             "description": "GeoJSON FeatureCollection of incidents",
@@ -181,7 +182,7 @@ async def list_incidents(
             total_row = rows_total[0] if rows_total else {"total": 0}
         total = int(total_row["total"]) if total_row and "total" in total_row else 0
 
-    # Geo fields are nullable; build geometry only when lon/lat present
+    # Geo fields are nullable; build geometry only when lon/lat present, and emit GeoJSON directly
     sql = f"""
         SELECT
           id,
@@ -193,9 +194,11 @@ async def list_incidents(
           mci_category,
           hood_158,
           lon, lat,
-          CASE WHEN ST_IsEmpty(geom) OR geom IS NULL THEN
-            CASE WHEN lon IS NOT NULL AND lat IS NOT NULL THEN ST_SetSRID(ST_MakePoint(lon,lat),4326) ELSE NULL END
-          ELSE geom END AS geometry
+          ST_AsGeoJSON(
+            CASE WHEN ST_IsEmpty(geom) OR geom IS NULL THEN
+              CASE WHEN lon IS NOT NULL AND lat IS NOT NULL THEN ST_SetSRID(ST_MakePoint(lon,lat),4326) ELSE NULL END
+            ELSE geom END
+          )::json AS geometry
         FROM tps_incidents
         WHERE {where_sql}
         ORDER BY {order_field} {order_dir} NULLS LAST, id {order_dir}
@@ -209,34 +212,20 @@ async def list_incidents(
         rows = await cur.fetchall()
 
     if as_geojson:
-        # Convert geometry to GeoJSON
-        # We need a separate query to ST_AsGeoJSON unless row factory handles it; do a lightweight conversion here.
-        ids = [r["id"] for r in rows]
-        if not ids:
+        # Geometry already in GeoJSON via main query
+        if not rows:
             return {"type": "FeatureCollection", "features": [], "total": total}
-        sql_gj = f"""
-            SELECT id,
-                   json_build_object('type','Point','coordinates', array[ST_X(geom)::float, ST_Y(geom)::float]) AS geometry
-            FROM (
-                SELECT id,
-                  CASE WHEN ST_IsEmpty(geom) OR geom IS NULL THEN
-                    CASE WHEN lon IS NOT NULL AND lat IS NOT NULL THEN ST_SetSRID(ST_MakePoint(lon,lat),4326) ELSE NULL END
-                  ELSE geom END AS geom
-                FROM tps_incidents
-                WHERE id = ANY(%s)
-            ) q
-        """
-        async with cursor() as cur:
-            await cur.execute(sql_gj, (ids,))
-            geom_map = {r["id"]: r["geometry"] for r in await cur.fetchall()}
         features = []
         for r in rows:
-            geom = geom_map.get(r["id"]) if r["id"] in geom_map else None
             props = dict(r)
-            props["geometry"] = geom
-            features.append(props)
-        fc = _to_geojson(features)
-        fc["total"] = total
-        return fc
+            geom = props.pop("geometry", None)
+            if geom is None:
+                # Fallback for tests/mocks or missing geom: use lon/lat when available
+                lon_v = props.get("lon")
+                lat_v = props.get("lat")
+                if lon_v is not None and lat_v is not None:
+                    geom = {"type": "Point", "coordinates": [float(lon_v), float(lat_v)]}
+            features.append({"type": "Feature", "geometry": geom, "properties": props})
+        return {"type": "FeatureCollection", "features": features, "total": total}
 
     return {"rows": rows, "count": len(rows), "total": total}
