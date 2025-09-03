@@ -24,6 +24,7 @@ class Feature(BaseModel):
 class FeatureCollection(BaseModel):
     type: str = Field(default="FeatureCollection")
     features: List[Feature]
+    total: Optional[int] = Field(default=None, description="Total rows matching filters (ignores limit/offset)")
 
 
 class BBox(BaseModel):
@@ -63,6 +64,7 @@ def _to_geojson(features: List[Dict[str, Any]]) -> Dict[str, Any]:
                         "sample": {
                             "value": {
                                 "type": "FeatureCollection",
+                                "total": 123,
                                 "features": [
                                     {
                                         "type": "Feature",
@@ -94,9 +96,22 @@ async def list_incidents(
     date_to: Optional[datetime] = Query(None, examples={"sample": {"value": "2025-01-31"}}),
     hood: Optional[str] = Query(None, description="Neighbourhood code", examples={"sample": {"value": "001"}}),
     bbox: Optional[str] = Query(None, description="minLon,minLat,maxLon,maxLat", examples={"sample": {"value": "-79.6,43.6,-79.3,43.8"}}),
+    mci_category: Optional[str] = Query(None, description="Major crime category", examples={"sample": {"value": "Robbery"}}),
+    offence: Optional[str] = Query(None, description="Offence contains (case-insensitive)", examples={"sample": {"value": "robbery"}}),
+    event_unique_id: Optional[str] = Query(None, description="Exact event unique id", examples={"sample": {"value": "E1"}}),
     limit: int = Query(500, ge=1, le=5000, examples={"sample": {"value": 100}}),
     offset: int = Query(0, ge=0, examples={"sample": {"value": 0}}),
     as_geojson: bool = Query(True),
+    sort_by: Optional[str] = Query(
+        "report_date",
+        description="Field to sort by (allowed: report_date, occ_date, id)",
+        examples={"sample": {"value": "report_date"}},
+    ),
+    sort_dir: Optional[str] = Query(
+        "desc",
+        description="Sort direction (asc|desc)",
+        examples={"sample": {"value": "desc"}},
+    ),
 ):
     where = ["1=1"]
     params: List[Any] = []
@@ -116,6 +131,15 @@ async def list_incidents(
     if hood:
         where.append("hood_158 = %s")
         params.append(hood)
+    if mci_category:
+        where.append("mci_category = %s")
+        params.append(mci_category)
+    if offence:
+        where.append("offence ILIKE %s")
+        params.append(f"%{offence}%")
+    if event_unique_id:
+        where.append("event_unique_id = %s")
+        params.append(event_unique_id)
 
     bbox_sql = None
     if bbox:
@@ -136,6 +160,27 @@ async def list_incidents(
 
     where_sql = " AND ".join(where)
 
+    # Whitelist ORDER BY
+    order_field_map = {
+        "report_date": "report_date",
+        "occ_date": "occ_date",
+        "id": "id",
+    }
+    order_field = order_field_map.get((sort_by or "report_date").lower(), "report_date")
+    order_dir = "DESC" if (sort_dir or "desc").lower() == "desc" else "ASC"
+
+    # Count total before pagination
+    count_sql = f"SELECT COUNT(*) AS total FROM tps_incidents WHERE {where_sql}"
+    async with cursor() as cur:
+        await cur.execute(count_sql, params)
+        # Some test cursors only implement fetchall(); support both.
+        try:
+            total_row = await cur.fetchone()
+        except AttributeError:
+            rows_total = await cur.fetchall()
+            total_row = rows_total[0] if rows_total else {"total": 0}
+        total = int(total_row["total"]) if total_row and "total" in total_row else 0
+
     # Geo fields are nullable; build geometry only when lon/lat present
     sql = f"""
         SELECT
@@ -153,7 +198,7 @@ async def list_incidents(
           ELSE geom END AS geometry
         FROM tps_incidents
         WHERE {where_sql}
-        ORDER BY report_date DESC NULLS LAST, id DESC
+        ORDER BY {order_field} {order_dir} NULLS LAST, id {order_dir}
         LIMIT %s OFFSET %s
     """
 
@@ -168,7 +213,7 @@ async def list_incidents(
         # We need a separate query to ST_AsGeoJSON unless row factory handles it; do a lightweight conversion here.
         ids = [r["id"] for r in rows]
         if not ids:
-            return {"type": "FeatureCollection", "features": []}
+            return {"type": "FeatureCollection", "features": [], "total": total}
         sql_gj = f"""
             SELECT id,
                    json_build_object('type','Point','coordinates', array[ST_X(geom)::float, ST_Y(geom)::float]) AS geometry
@@ -190,6 +235,8 @@ async def list_incidents(
             props = dict(r)
             props["geometry"] = geom
             features.append(props)
-        return _to_geojson(features)
+        fc = _to_geojson(features)
+        fc["total"] = total
+        return fc
 
-    return {"rows": rows, "count": len(rows)}
+    return {"rows": rows, "count": len(rows), "total": total}

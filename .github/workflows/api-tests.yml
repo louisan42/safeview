@@ -27,3 +27,47 @@ jobs:
           PYTHONPATH: .
         run: |
           pytest -q api/tests
+
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:15-3.4
+        env:
+          POSTGRES_DB: sv
+          POSTGRES_USER: sv
+          POSTGRES_PASSWORD: sv
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sv -d sv" \
+          --health-interval 5s \
+          --health-timeout 3s \
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r api/requirements.txt -r api/requirements-dev.txt
+      - name: Install psql client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+      - name: Init database schema and seed
+        env:
+          PGPASSWORD: sv
+        run: |
+          until pg_isready -h localhost -p 5432 -U sv -d sv; do echo waiting for db; sleep 2; done
+          psql -h localhost -p 5432 -U sv -d sv -f db/init/001_extensions.sql
+          psql -h localhost -p 5432 -U sv -d sv -f db/init/002_schema.sql
+          psql -h localhost -p 5432 -U sv -d sv -f db/init/003_seed.sql
+      - name: Run integration tests
+        env:
+          PYTHONPATH: .
+          PG_DSN: postgresql://sv:sv@localhost:5432/sv
+        run: |
+          pytest -q -m integration api/tests
