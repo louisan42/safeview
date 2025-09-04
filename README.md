@@ -127,3 +127,15 @@ Notes:
 - Do NOT commit secrets. `etl/config.yaml` is ignored via `.gitignore`. Use `etl/config.example.yaml` for templates.
 - PostGIS must be enabled in the target DB (on Supabase: `create extension if not exists postgis;`).
 - Loads are idempotent: staging + dedup + upsert avoids unique violations; geometry and cleanup performed post-load.
+
+## Optional Next Steps
+- __OpenAPI polish__: Expand parameter descriptions and examples for new filters and sorting on `incidents` and `neighbourhoods`. Clarify `total` semantics.
+- __Indices and performance__: Add indexes on `event_unique_id`, `mci_category`, `dataset`, and consider trigram GIN for `offence ILIKE`.
+- __Migrations__: Introduce Alembic for schema versioning instead of ad‑hoc SQL.
+- __Observability__: Structured logging (request IDs), basic metrics (request counts/latency), and slow query logging.
+- __Caching__: Add short‑TTL caching for read endpoints; consider bbox+dataset keyed cache.
+- __Rate limiting__: Per‑IP or per‑token limits to protect the API.
+- __Auth__: Token‑based access if exposing publicly.
+- __Data quality__: Validation checks post‑ETL; alerts on anomalies.
+- __Load testing__: Baseline latency/throughput; tune DB and query plans.
+- __CI improvements__: Cache pip, separate unit vs integration triggers, optional nightly integration run.

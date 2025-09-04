@@ -24,3 +24,13 @@ logs/
 etl/config.yaml
 # Allow example to be committed
 !etl/config.example.yaml
+
+# Web
+# node modules
+web/node_modules
+web/.vite
+web/.cache
+web/.env
+web/.env.*
+
+

@@ -203,9 +203,17 @@ def run():
 
         # Data quality checks
         hard_fail = False
+        fail_on_zero = os.getenv('ETL_FAIL_ON_ZERO', '').lower() in ('1', 'true', 'yes', 'on')
         if totals["inserted"] == 0:
-            print("[ETL][error] No incident rows processed. Failing the job.")
-            hard_fail = True
+            if bool(etl.get('backfill', False)) or fail_on_zero:
+                print("[ETL][error] No incident rows processed.")
+                if bool(etl.get('backfill', False)):
+                    print("[ETL][error] Backfill mode is enabled, expected data. Failing the job.")
+                else:
+                    print("[ETL][error] ETL_FAIL_ON_ZERO is set. Failing the job.")
+                hard_fail = True
+            else:
+                print("[ETL][warn] No incident rows processed. This can be normal for quiet periods; not failing.")
         else:
             # Warn if any dataset is empty in incremental mode
             empty_ds = [ds for ds, m in totals["datasets"].items() if m["rows"] == 0]

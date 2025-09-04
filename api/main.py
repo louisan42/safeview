@@ -4,6 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from .routers.health import router as health_router
 from .routers.incidents import router as incidents_router
 from .routers.neighbourhoods import router as neighbourhoods_router
+from .routers.stats import router as stats_router
+from .config import settings
 
 app = FastAPI(
     title="SafetyView API",
@@ -26,7 +28,7 @@ app = FastAPI(
 # CORS: permissive for now; tighten in deployment
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -35,6 +37,7 @@ app.add_middleware(
 app.include_router(health_router, prefix="/v1")
 app.include_router(incidents_router, prefix="/v1")
 app.include_router(neighbourhoods_router, prefix="/v1")
+app.include_router(stats_router, prefix="/v1")
 
 
 # For `python -m api.main`
