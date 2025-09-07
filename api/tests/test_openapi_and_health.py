@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+from unittest.mock import patch
 
 from api.main import app
 import api.routers.health as health_router
@@ -9,12 +10,13 @@ async def _fake_ping() -> bool:
 
 
 def test_health_ok():
-    client = TestClient(app)
-    resp = client.get("/health")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body.get("ok") is True
-    assert body.get("service") == "api"
+    with patch('api.db.ping', return_value=True):
+        client = TestClient(app)
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("ok") is True
+        assert body.get("service") == "api"
 
 
 def test_openapi_schema_available():
