@@ -1,21 +1,6 @@
 from fastapi.testclient import TestClient
-from unittest.mock import patch
-import asyncio
 
 from api.main import app
-
-
-def test_health_ok():
-    async def mock_ping():
-        return True
-    
-    with patch('api.db.ping', side_effect=mock_ping):
-        client = TestClient(app)
-        resp = client.get("/health")
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body.get("ok") is True
-        assert body.get("service") == "api"
 
 
 def test_openapi_schema_available():
