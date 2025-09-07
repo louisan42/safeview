@@ -1,16 +1,15 @@
 from fastapi.testclient import TestClient
 from unittest.mock import patch
+import asyncio
 
 from api.main import app
-import api.routers.health as health_router
-
-
-async def _fake_ping() -> bool:
-    return True
 
 
 def test_health_ok():
-    with patch('api.db.ping', return_value=True):
+    async def mock_ping():
+        return True
+    
+    with patch('api.db.ping', side_effect=mock_ping):
         client = TestClient(app)
         resp = client.get("/health")
         assert resp.status_code == 200
