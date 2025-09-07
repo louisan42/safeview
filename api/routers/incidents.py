@@ -6,6 +6,25 @@ from pydantic import BaseModel, Field
 
 from ..db import cursor
 
+# Helper must be defined before route decorator to avoid being bound as the handler
+def _parse_dt(val: str | None) -> datetime | None:
+    """Parse ISO datetime or date string; treat empty/None as None. Supports 'Z'."""
+    if not val:
+        return None
+    s = val.strip()
+    if not s:
+        return None
+    try:
+        # If date-only, make it start-of-day UTC
+        if len(s) == 10 and s.count('-') == 2:
+            return datetime.fromisoformat(s + 'T00:00:00+00:00')
+        # Normalize Z to +00:00 for fromisoformat
+        if s.endswith('Z'):
+            s = s[:-1] + '+00:00'
+        return datetime.fromisoformat(s)
+    except Exception:
+        return None
+
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
 
@@ -87,14 +106,15 @@ def _to_geojson(features: List[Dict[str, Any]]) -> Dict[str, Any]:
         422: {"model": ErrorResponse, "description": "Validation error"},
     },
 )
+
 async def list_incidents(
     dataset: Optional[str] = Query(
         None,
         description="robbery|theft_over|break_and_enter or other dataset tags",
         examples={"sample": {"value": "robbery"}},
     ),
-    date_from: Optional[datetime] = Query(None, examples={"sample": {"value": "2025-01-01"}}),
-    date_to: Optional[datetime] = Query(None, examples={"sample": {"value": "2025-01-31"}}),
+    date_from: Optional[str] = Query(None, examples={"sample": {"value": "2025-01-01"}}),
+    date_to: Optional[str] = Query(None, examples={"sample": {"value": "2025-01-31"}}),
     hood: Optional[str] = Query(None, description="Neighbourhood code", examples={"sample": {"value": "001"}}),
     bbox: Optional[str] = Query(None, description="minLon,minLat,maxLon,maxLat", examples={"sample": {"value": "-79.6,43.6,-79.3,43.8"}}),
     mci_category: Optional[str] = Query(None, description="Major crime category", examples={"sample": {"value": "Robbery"}}),
@@ -103,6 +123,7 @@ async def list_incidents(
     limit: int = Query(500, ge=1, le=5000, examples={"sample": {"value": 100}}),
     offset: int = Query(0, ge=0, examples={"sample": {"value": 0}}),
     as_geojson: bool = Query(True),
+    debug: Optional[bool] = Query(False, description="When true, logs where/params and counts for diagnosis"),
     sort_by: Optional[str] = Query(
         "report_date",
         description="Field to sort by (allowed: report_date, occ_date, id)",
@@ -120,14 +141,16 @@ async def list_incidents(
     if dataset:
         where.append("dataset = %s")
         params.append(dataset)
-    if date_from:
+    dt_from = _parse_dt(date_from)
+    dt_to = _parse_dt(date_to)
+    if dt_from:
         where.append("report_date >= %s")
-        params.append(date_from)
-    if date_to:
+        params.append(dt_from)
+    if dt_to:
         where.append("report_date <= %s")
-        params.append(date_to)
+        params.append(dt_to)
     # Validate date range
-    if date_from and date_to and date_from > date_to:
+    if dt_from and dt_to and dt_from > dt_to:
         raise HTTPException(status_code=422, detail="date_from cannot be after date_to")
     if hood:
         where.append("hood_158 = %s")
@@ -153,7 +176,7 @@ async def list_incidents(
             raise HTTPException(status_code=422, detail="bbox coordinates must be numbers")
         if minx >= maxx or miny >= maxy:
             raise HTTPException(status_code=422, detail="bbox must have min < max for both lon and lat")
-        bbox_sql = "ST_Intersects(geom, ST_MakeEnvelope(%s,%s,%s,%s,4326))"
+        bbox_sql = "ST_Intersects(COALESCE(geom, ST_SetSRID(ST_MakePoint(lon,lat),4326)), ST_MakeEnvelope(%s,%s,%s,%s,4326))"
         params.extend([minx, miny, maxx, maxy])
 
     if bbox_sql:
@@ -170,6 +193,13 @@ async def list_incidents(
     order_field = order_field_map.get((sort_by or "report_date").lower(), "report_date")
     order_dir = "DESC" if (sort_dir or "desc").lower() == "desc" else "ASC"
 
+    # Debug logging of filters
+    if debug:
+        try:
+            print(f"[INCIDENTS][debug] where={where_sql} params={params}")
+        except Exception:
+            pass
+
     # Count total before pagination
     count_sql = f"SELECT COUNT(*) AS total FROM tps_incidents WHERE {where_sql}"
     async with cursor() as cur:
@@ -181,6 +211,26 @@ async def list_incidents(
             rows_total = await cur.fetchall()
             total_row = rows_total[0] if rows_total else {"total": 0}
         total = int(total_row["total"]) if total_row and "total" in total_row else 0
+        if debug:
+            try:
+                # Global count (no filters)
+                await cur.execute("SELECT COUNT(*) AS c, MIN(report_date) AS min_dt, MAX(report_date) AS max_dt FROM tps_incidents")
+                g = await cur.fetchone()
+                # Bbox-only count (if bbox present)
+                bbox_only = None
+                if bbox_sql:
+                    await cur.execute(
+                        f"SELECT COUNT(*) AS c FROM tps_incidents WHERE {bbox_sql}",
+                        params[-4:] if len(params) >= 4 else []
+                    )
+                    bbox_row = await cur.fetchone()
+                    bbox_only = int(bbox_row['c']) if bbox_row else None
+                print(
+                    f"[INCIDENTS][debug] total_filtered={total} total_global={int(g['c']) if g else 'n/a'} "
+                    f"min_dt={g['min_dt'] if g else 'n/a'} max_dt={g['max_dt'] if g else 'n/a'} bbox_only={bbox_only}"
+                )
+            except Exception:
+                pass
 
     # Geo fields are nullable; build geometry only when lon/lat present, and emit GeoJSON directly
     sql = f"""

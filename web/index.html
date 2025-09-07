@@ -2,19 +2,75 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SafetyView</title>
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
       crossorigin=""
     />
+    <title>SafetyView</title>
     <style>
-      html, body, #root { height: 100%; margin: 0; }
+      :root {
+        --panel-bg: rgba(255, 255, 255, 0.92);
+        --panel-border: rgba(0,0,0,0.08);
+        --shadow: 0 10px 25px rgba(0,0,0,0.15);
+        --text: #0f172a;
+        --muted: #475569;
+        --accent: #2563eb;
+      }
+      html, body, #root { height: 100%; }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+        color: var(--text);
+        background: #f5f7fb;
+      }
       .map { height: 100%; }
-      .panel { position: absolute; top: 10px; left: 10px; background: #fff; padding: 8px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,.15); z-index: 1000; }
-      .panel input { margin-right: 6px; }
+      .panel {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 1000;
+        background: var(--panel-bg);
+        backdrop-filter: saturate(140%) blur(6px);
+        border: 1px solid var(--panel-border);
+        border-top-right-radius: 14px;
+        border-bottom-right-radius: 14px;
+        box-shadow: var(--shadow);
+        padding: 12px 12px 10px 12px;
+        width: min(92vw, 340px);
+      }
+      .panel .heading {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+      }
+      .panel .title { font-weight: 700; letter-spacing: 0.2px; }
+      .panel .meta { font-size: 12px; color: var(--muted); }
+      .controls { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+      .controls select,
+      .controls input[type="date"],
+      .controls input[type="text"] {
+        appearance: none;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 6px 8px;
+        font-size: 13px;
+        color: #0f172a;
+        background: #fff;
+        outline: none;
+      }
+      .controls select:focus,
+      .controls input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,0.15) }
+      .legend { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 8px; border-radius: 999px; border: 1px solid #e5e7eb; background: #fff; }
+      .dot { width: 10px; height: 10px; border-radius: 999px; display: inline-block; box-shadow: 0 0 0 1px rgba(0,0,0,0.08) inset; }
+      .empty-state { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 18px; color: #64748b; background: rgba(255,255,255,0.85); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--panel-border); }
+
+      /* Legacy styles - now handled by Tailwind components */
     </style>
   </head>
   <body>

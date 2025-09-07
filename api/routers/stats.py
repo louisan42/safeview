@@ -20,6 +20,9 @@ class DailyCount(BaseModel):
 
 class StatsResponse(BaseModel):
     total_incidents: int
+    min_report_date: str | None
+    max_report_date: str | None
+    last_etl_run_at: str | None
     by_dataset: List[CountBy]
     by_mci_category: List[CountBy]
     last_30d: List[DailyCount]
@@ -50,11 +53,23 @@ class StatsResponse(BaseModel):
     },
 )
 async def get_stats() -> Dict[str, Any]:
-    # total incidents
+    # total incidents and min/max dates
     async with cursor() as cur:
-        await cur.execute("SELECT COUNT(*) AS total FROM tps_incidents")
+        await cur.execute("SELECT COUNT(*) AS total, MIN(report_date) AS min_dt, MAX(report_date) AS max_dt FROM tps_incidents")
         row = await cur.fetchone()
         total = int(row["total"]) if row and "total" in row else 0
+        min_dt = row["min_dt"].isoformat() if row and row.get("min_dt") else None
+        max_dt = row["max_dt"].isoformat() if row and row.get("max_dt") else None
+
+    # Read last_etl_run_at from metadata if available
+    last_etl_run_at: str | None = None
+    try:
+        async with cursor() as cur:
+            await cur.execute("SELECT value FROM etl_metadata WHERE key = 'last_etl_run_at'")
+            r = await cur.fetchone()
+            last_etl_run_at = r["value"] if r and "value" in r else None
+    except Exception:
+        pass
 
     # by dataset
     async with cursor() as cur:
@@ -99,6 +114,9 @@ async def get_stats() -> Dict[str, Any]:
 
     return {
         "total_incidents": total,
+        "min_report_date": min_dt,
+        "max_report_date": max_dt,
+        "last_etl_run_at": last_etl_run_at,
         "by_dataset": _normalize(by_dataset),
         "by_mci_category": _normalize(by_cat),
         "last_30d": _normalize(last_30d),

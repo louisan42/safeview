@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from time import perf_counter
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 
-from etl.db import connect, ensure_tables, copy_incidents_csv, post_load_cleanup, upsert_neighbourhoods
+from etl.db import connect, ensure_tables, copy_incidents_csv, post_load_cleanup, upsert_neighbourhoods, set_metadata
 from etl.transform import fetch_paginated, build_incidents_csv, fetch_neighbourhoods_geojson
 
 FIELDS = 'EVENT_UNIQUE_ID,REPORT_DATE,OCC_DATE,OFFENCE,MCI_CATEGORY,HOOD_158,LONG_WGS84,LAT_WGS84'
@@ -200,6 +200,22 @@ def run():
         for ds, m in totals["datasets"].items():
             print(f"  - {ds}: rows={m['rows']}, time={m['seconds']}s")
         print(f"  Total incident rows processed: {totals['inserted']}")
+
+        # Write ETL metadata (last run timestamp, DB min/max report_date)
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT MIN(report_date) AS min_dt, MAX(report_date) AS max_dt FROM tps_incidents")
+                row = cur.fetchone()
+                min_dt = row["min_dt"].isoformat() if row and row.get("min_dt") else None
+                max_dt = row["max_dt"].isoformat() if row and row.get("max_dt") else None
+            set_metadata(conn, 'last_etl_run_at', datetime.utcnow().replace(tzinfo=timezone.utc).isoformat())
+            if min_dt:
+                set_metadata(conn, 'db_min_report_date', min_dt)
+            if max_dt:
+                set_metadata(conn, 'db_max_report_date', max_dt)
+            print(f"[ETL] Metadata updated: last_etl_run_at, db_min_report_date={min_dt}, db_max_report_date={max_dt}")
+        except Exception as e:
+            print(f"[ETL][warn] Could not update etl metadata: {e}")
 
         # Data quality checks
         hard_fail = False

@@ -5,6 +5,7 @@ from .routers.health import router as health_router
 from .routers.incidents import router as incidents_router
 from .routers.neighbourhoods import router as neighbourhoods_router
 from .routers.stats import router as stats_router
+from .routers.analytics import router as analytics_router
 from .config import settings
 
 app = FastAPI(
@@ -38,6 +39,7 @@ app.include_router(health_router, prefix="/v1")
 app.include_router(incidents_router, prefix="/v1")
 app.include_router(neighbourhoods_router, prefix="/v1")
 app.include_router(stats_router, prefix="/v1")
+app.include_router(analytics_router)
 
 
 # For `python -m api.main`

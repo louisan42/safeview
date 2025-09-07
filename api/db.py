@@ -16,14 +16,27 @@ async def get_conn() -> psycopg.AsyncConnection:
     global _pool
     if _pool is None or _pool.closed:
         _pool = await psycopg.AsyncConnection.connect(settings.PG_DSN)
+        try:
+            _pool.autocommit = True  # avoid aborted transaction state across requests
+        except Exception:
+            pass
     return _pool
 
 
 @asynccontextmanager
 async def cursor(dict_rows: bool = True) -> AsyncIterator[psycopg.AsyncCursor]:
     conn = await get_conn()
-    async with conn.cursor(row_factory=dict_row if dict_rows else None) as cur:
-        yield cur
+    try:
+        async with conn.cursor(row_factory=dict_row if dict_rows else None) as cur:
+            yield cur
+    except Exception:
+        # Ensure we clear any failed transaction state so subsequent requests don't see
+        # "current transaction is aborted" on this shared connection.
+        try:
+            await conn.rollback()
+        except Exception:
+            pass
+        raise
 
 
 async def ping() -> bool:

@@ -5,6 +5,13 @@ DDL_ENABLE_POSTGIS = """
 CREATE EXTENSION IF NOT EXISTS postgis;
 """
 
+DDL_METADATA = """
+CREATE TABLE IF NOT EXISTS etl_metadata (
+  key text PRIMARY KEY,
+  value text
+);
+"""
+
 DDL_NEIGHBOURHOODS = """
 CREATE TABLE IF NOT EXISTS cot_neighbourhoods_158 (
   area_long_code text PRIMARY KEY,
@@ -84,6 +91,7 @@ def ensure_tables(conn):
             print(f"[ETL][warn] Skipping CREATE EXTENSION postgis (permission or already installed): {e}")
         cur.execute(DDL_NEIGHBOURHOODS)
         cur.execute(DDL_INCIDENTS)
+        cur.execute(DDL_METADATA)
         # Create/refresh analytics views
         try:
             cur.execute(DDL_ANALYTICS_VIEWS)
@@ -170,4 +178,17 @@ def upsert_neighbourhoods(conn, rows: List[Tuple[str, str, str, str]]):
     )
     with conn.cursor() as cur:
         cur.executemany(sql, rows)
+    conn.commit()
+
+
+def set_metadata(conn, key: str, value: str):
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO etl_metadata(key, value)
+            VALUES (%s, %s)
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+            """,
+            (key, value),
+        )
     conn.commit()

@@ -2,7 +2,7 @@ name: ETL
 
 on:
   schedule:
-    - cron: '30 5 * * *' # daily at 05:30 UTC
+    - cron: '30 5 * * 1' # weekly on Monday at 05:30 UTC
   push:
     paths:
       - 'etl/**'
