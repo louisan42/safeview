@@ -1,12 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers.health import router as health_router
-from .routers.incidents import router as incidents_router
-from .routers.neighbourhoods import router as neighbourhoods_router
-from .routers.stats import router as stats_router
-from .routers.analytics import router as analytics_router
-from .config import settings
+from routers.health import router as health_router
+from routers.incidents import router as incidents_router
+from routers.neighbourhoods import router as neighbourhoods_router
+from routers.stats import router as stats_router
+from routers.analytics import router as analytics_router
+from config import settings
 
 app = FastAPI(
     title="SafetyView API",
