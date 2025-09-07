@@ -4,7 +4,12 @@ from typing import List, Optional, Literal, Dict, Any
 from fastapi import APIRouter, Query, HTTPException
 from pydantic import BaseModel
 
-from ..db import cursor
+try:
+    # For Docker/production (running from /app directory)
+    from db import cursor
+except ImportError:
+    # For tests/development (running from project root)
+    from api.db import cursor
 
 router = APIRouter(prefix="/v1", tags=["analytics"])
 

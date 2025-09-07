@@ -3,7 +3,12 @@ import os
 from typing import List, Optional, Any, Dict
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
-from ..db import cursor
+try:
+    # For Docker/production (running from /app directory)
+    from db import cursor
+except ImportError:
+    # For tests/development (running from project root)
+    from api.db import cursor
 
 # Helper functions to reduce cognitive complexity
 def _parse_dt(val: str | None) -> datetime | None:

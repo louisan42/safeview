@@ -3,7 +3,12 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from ..db import cursor
+try:
+    # For Docker/production (running from /app directory)
+    from db import cursor
+except ImportError:
+    # For tests/development (running from project root)
+    from api.db import cursor
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 

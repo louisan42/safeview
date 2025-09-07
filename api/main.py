@@ -1,8 +1,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+import sys
+import os
+
+# Add current directory to Python path for Docker environment
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 try:
-    # For Docker/production (running from /app directory)
+    # Try absolute imports first (for Docker/production)
     from routers.health import router as health_router
     from routers.incidents import router as incidents_router
     from routers.neighbourhoods import router as neighbourhoods_router
@@ -10,13 +16,19 @@ try:
     from routers.analytics import router as analytics_router
     from config import settings
 except ImportError:
-    # For tests/development (running from project root)
-    from api.routers.health import router as health_router
-    from api.routers.incidents import router as incidents_router
-    from api.routers.neighbourhoods import router as neighbourhoods_router
-    from api.routers.stats import router as stats_router
-    from api.routers.analytics import router as analytics_router
-    from api.config import settings
+    try:
+        # Try relative imports (for tests/development from project root)
+        from api.routers.health import router as health_router
+        from api.routers.incidents import router as incidents_router
+        from api.routers.neighbourhoods import router as neighbourhoods_router
+        from api.routers.stats import router as stats_router
+        from api.routers.analytics import router as analytics_router
+        from api.config import settings
+    except ImportError as e:
+        print(f"Failed to import modules: {e}")
+        print(f"Current working directory: {os.getcwd()}")
+        print(f"Python path: {sys.path}")
+        raise
 
 app = FastAPI(
     title="SafetyView API",
