@@ -3,8 +3,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
+    ports:
+      - "8000:8000"
     environment:
-      - DATABASE_URL=${DATABASE_URL}
+      - PG_DSN=${DATABASE_URL}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -16,8 +18,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.web
+    ports:
+      - "80:80"
     depends_on:
       - api
     environment:
-      - VITE_API_BASE_URL=/api
+      - VITE_API_BASE_URL=https://project-sv.amoahnuamah.com/api
     restart: unless-stopped
