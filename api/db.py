@@ -4,7 +4,12 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 import psycopg
 from psycopg.rows import dict_row
 
-from .config import settings
+try:
+    # For Docker/production (running from /app directory)
+    from config import settings
+except ImportError:
+    # For tests/development (running from project root)
+    from api.config import settings
 
 # Simple async connection pool using psycopg "async" connection
 # Note: psycopg (v3) supports async via psycopg.AsyncConnection
