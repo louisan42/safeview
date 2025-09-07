@@ -8,11 +8,9 @@ async def _fake_ping() -> bool:
     return True
 
 
-def test_health_ok(monkeypatch):
-    # Avoid real DB in unit tests
-    monkeypatch.setattr(health_router, "ping", _fake_ping)
+def test_health_ok():
     client = TestClient(app)
-    resp = client.get("/v1/health")
+    resp = client.get("/health")
     assert resp.status_code == 200
     body = resp.json()
     assert body.get("ok") is True

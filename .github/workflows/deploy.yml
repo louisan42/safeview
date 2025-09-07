@@ -1,0 +1,26 @@
+name: Deploy to Coolify
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Trigger Coolify Deployment
+      run: |
+        curl -X POST "${{ secrets.COOLIFY_WEBHOOK_URL }}" \
+          -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "ref": "${{ github.ref }}",
+            "sha": "${{ github.sha }}",
+            "repository": "${{ github.repository }}",
+            "pusher": "${{ github.actor }}"
+          }'

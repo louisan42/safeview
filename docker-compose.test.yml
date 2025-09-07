@@ -1,0 +1,19 @@
+services:
+  test-db:
+    image: postgis/postgis:15-3.4
+    container_name: sv_test_db
+    environment:
+      POSTGRES_DB: sv_test
+      POSTGRES_USER: sv_test
+      POSTGRES_PASSWORD: sv_test
+    ports:
+      - "55433:5432"  # Different port to avoid conflicts
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sv_test -d sv_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    tmpfs:
+      - /var/lib/postgresql/data  # In-memory for faster tests

@@ -35,7 +35,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(health_router, prefix="/v1")
+app.include_router(health_router)
 app.include_router(incidents_router, prefix="/v1")
 app.include_router(neighbourhoods_router, prefix="/v1")
 app.include_router(stats_router, prefix="/v1")

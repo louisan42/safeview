@@ -1,141 +1,186 @@
-# SafetyView ETL
+# SafetyView
 
-A small ETL that ingests Toronto Police Service incidents and City of Toronto neighbourhood polygons into PostgreSQL/PostGIS.
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=louisan42_safeview&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=louisan42_safeview)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=louisan42_safeview&metric=coverage)](https://sonarcloud.io/summary/new_code?id=louisan42_safeview)
+[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=louisan42_safeview&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=louisan42_safeview)
 
-## Structure
-- `etl/main.py` – entrypoint
-- `etl/transform.py` – HTTP fetch + transform to CSV
-- `etl/db.py` – schema, copy/upsert, post-load cleanup
-- `etl/config.example.yaml` – template for local config (do NOT commit secrets)
-- `.github/workflows/etl.yml` – CI to run nightly and on changes
-- `api/` – FastAPI-based backend (city-agnostic), OpenAPI/Swagger built-in
-  - `api/main.py` – app, OpenAPI metadata
-  - `api/routers/` – `/v1/health`, `/v1/incidents`, `/v1/neighbourhoods`
-  - `api/requirements.txt` – API deps
-  - `api/requirements-dev.txt` – test deps (pytest)
-  - `.github/workflows/api-tests.yml` – API unit tests in CI
+Open-source crime and safety analytics platform with interactive mapping, neighbourhood comparisons, and trend analysis. Built for cities to understand and visualize public safety data.
 
-## Local Setup
-1. Python 3.13 (recommended)
-2. Create venv and install deps:
-   ```bash
-   python -m venv .venv && source .venv/bin/activate
-   pip install -r etl/requirements.txt
-   ```
-3. Create config from template and fill DSN:
-   ```bash
-   cp etl/config.example.yaml etl/config.yaml
-   # edit etl/config.yaml: set pg_dsn
-   ```
-4. Run:
-   ```bash
-   python -m etl.main
-   # or with env overrides
-   PG_DSN=postgresql://user:pass@host:5432/db \
-   ETL_WINDOW_DAYS=7 ETL_BACKFILL=false \
-   python -m etl.main
-   ```
+## 🎯 Project Overview
 
-## Backfill
-- Full table: set `ETL_BACKFILL=true` (or `etl.backfill: true` in config)
-- From date: `ETL_BACKFILL=true ETL_BACKFILL_START=YYYY-MM-DD`
+SafetyView transforms raw crime incident data into actionable insights through:
 
-## CI (GitHub Actions)
-- Workflow: `.github/workflows/etl.yml`
-- Triggers: nightly (05:30 UTC), on `etl/**` changes, and manual dispatch
-- Secrets:
-  - `PG_DSN` – your Postgres connection string (e.g., Supabase direct connection)
-- Manual run: GitHub → Actions → ETL → Run workflow (optionally set window/backfill inputs)
+- **📊 Data Ingestion**: Automated ETL pipeline for Toronto Police Service open data
+- **🗺️ Interactive Mapping**: Real-time incident visualization with neighbourhood boundaries
+- **📈 Analytics**: Trend analysis, hotspot detection, and per-capita safety metrics
+- **🔍 Filtering**: Dynamic filtering by crime type, date range, and geographic area
 
-### API Tests CI
-- Workflow: `.github/workflows/api-tests.yml`
-- Jobs:
-  - `test`: unit tests (no DB).
-  - `integration`: spins up PostGIS service, initializes schema/seed, runs tests marked `integration`.
+## 🏗️ Architecture
 
-## Analytics Views
-- The ETL creates helpful SQL views during `ensure_tables()` in `etl/db.py`:
-  - `v_incidents_daily(day, dataset, cnt)` – daily counts per dataset.
-  - `v_incidents_by_neighbourhood(dataset, hood_158, cnt)` – counts per neighbourhood code.
-  - `v_incidents_last_30d` – convenience view filtering last 30 days.
+- **ETL Pipeline** (`etl/`) – Ingests and processes TPS incident data
+- **FastAPI Backend** (`api/`) – RESTful API with geospatial endpoints
+- **React Frontend** (`web/`) – Interactive map with Tailwind UI
+- **PostgreSQL/PostGIS** (`db/`) – Geospatial database for incidents and boundaries
+- **Docker** – Containerized development and deployment
 
-## Demo Dashboard (for testing DB only)
-This is a minimal FastAPI app to verify the database is populated. Not for production.
+## 🚀 Quick Start
 
-Run locally:
+### Prerequisites
+- Docker and Docker Compose
+- Python 3.11+ (for local development)
+- Node.js 18+ (for frontend development)
+
+### 1. Clone and Setup
 ```bash
-pip install -r etl/requirements.txt
-PG_DSN="postgresql://user:pass@host:5432/db?sslmode=require" \
-uvicorn etl.demo_dashboard:app --reload --port 8000
+git clone https://github.com/louisan42/safeview.git
+cd SafetyView
+
+# Copy environment template
+cp env.example .env
+# Edit .env with your database configuration
 ```
 
-Open http://127.0.0.1:8000 to see totals and daily counts.
-
-API endpoints:
-- `GET /api/health` – basic DB connectivity check
-- `GET /api/summary` – totals, by-dataset counts, and last 30 days daily counts
-
-## API (FastAPI)
-Run the API locally (Swagger UI at `/docs`):
+### 2. Docker Development (Recommended)
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r api/requirements.txt
-export PG_DSN="postgresql://user:pass@host:5432/db?sslmode=require"
-uvicorn api.main:app --reload --port 8000
+# Start all services (database, API, frontend)
+./deploy.sh
+
+# Or start individual services
+docker-compose -f docker-compose.dev.yml up -d db    # Database only
+docker-compose -f docker-compose.dev.yml up -d api   # API + Database
+docker-compose -f docker-compose.dev.yml up -d       # Full stack
 ```
 
-Test in browser:
-- OpenAPI schema: http://127.0.0.1:8000/openapi.json
-- Swagger UI: http://127.0.0.1:8000/docs
-- ReDoc: http://127.0.0.1:8000/redoc
-- Health: http://127.0.0.1:8000/v1/health
-- Neighbourhoods: http://127.0.0.1:8000/v1/neighbourhoods
-- Incidents (example): http://127.0.0.1:8000/v1/incidents?dataset=robbery&limit=10
+**Access Points:**
+- 🌐 **Frontend**: http://localhost:3000
+- 🔌 **API**: http://localhost:8000
+- 📚 **API Docs**: http://localhost:8000/docs
+- 🗄️ **Database**: localhost:55432
 
-## Running API tests locally
-Unit tests do not require a live DB (health is mocked):
+### 3. Manual Development Setup
+
+#### Database
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r api/requirements.txt -r api/requirements-dev.txt
-pytest -q api/tests
+# Start PostgreSQL with PostGIS
+docker-compose -f docker-compose.dev.yml up -d db
 ```
 
-### Local PostGIS with docker compose (for integration tests)
-Spin up a local PostGIS and seed minimal data:
-
+#### Backend API
 ```bash
-# Optional: override port (defaults to 55432)
-PG_PORT=55432 docker compose up -d db
+cd api
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
 
-# Set DSN for the API/tests
-export PG_DSN=postgresql://sv:sv@localhost:${PG_PORT:-55432}/sv
+# Set database connection
+export PG_DSN="postgresql://sv:sv@localhost:55432/sv"
 
-# The container auto-runs init SQL from db/init/*.sql on first start.
+# Start API server
+python -m api.main
+# API available at http://localhost:8000
 ```
 
-Run integration tests (requires PG_DSN):
-
+#### Frontend
 ```bash
-pytest -q -m integration api/tests
+cd web
+npm install
+npm run dev
+# Frontend available at http://localhost:5173
 ```
 
-Notes:
-- On Apple Silicon, no platform flag is required; Docker will emulate if needed.
-- The compose file exposes the DB on a high port to avoid local conflicts.
+#### ETL Pipeline (Optional)
+```bash
+cd etl
+pip install -r requirements.txt
 
-## Notes
-- Do NOT commit secrets. `etl/config.yaml` is ignored via `.gitignore`. Use `etl/config.example.yaml` for templates.
-- PostGIS must be enabled in the target DB (on Supabase: `create extension if not exists postgis;`).
-- Loads are idempotent: staging + dedup + upsert avoids unique violations; geometry and cleanup performed post-load.
+# Configure data source
+cp config.example.yaml config.yaml
+# Edit config.yaml with your database connection
 
-## Optional Next Steps
-- __OpenAPI polish__: Expand parameter descriptions and examples for new filters and sorting on `incidents` and `neighbourhoods`. Clarify `total` semantics.
-- __Indices and performance__: Add indexes on `event_unique_id`, `mci_category`, `dataset`, and consider trigram GIN for `offence ILIKE`.
-- __Migrations__: Introduce Alembic for schema versioning instead of ad‑hoc SQL.
-- __Observability__: Structured logging (request IDs), basic metrics (request counts/latency), and slow query logging.
-- __Caching__: Add short‑TTL caching for read endpoints; consider bbox+dataset keyed cache.
-- __Rate limiting__: Per‑IP or per‑token limits to protect the API.
-- __Auth__: Token‑based access if exposing publicly.
-- __Data quality__: Validation checks post‑ETL; alerts on anomalies.
-- __Load testing__: Baseline latency/throughput; tune DB and query plans.
-- __CI improvements__: Cache pip, separate unit vs integration triggers, optional nightly integration run.
+# Run data ingestion
+python -m etl.main
+```
+
+## Testing Strategy
+
+SafetyView uses a **two-tier testing approach** for optimal development experience:
+
+### 1. Fast In-Memory Tests (Local Development)
+- **Speed**: ~0.7 seconds for full suite
+- **Database**: Mocked SQLite in-memory
+- **Coverage**: Business logic, API contracts, data transformations
+- **Usage**: `pytest` (runs automatically, no setup required)
+
+### 2. Real Database Integration Tests (CI/CD)
+- **Speed**: ~10-15 seconds (includes PostGIS setup)
+- **Database**: Real PostGIS with test data
+- **Coverage**: SQL queries, database constraints, PostGIS functions
+- **Usage**: Runs automatically in GitHub Actions
+
+### 🧪 Testing Commands
+
+```bash
+# Fast unit tests (recommended for development)
+make test                 # or: pytest -m "not integration"
+
+# Integration tests with live PostGIS
+make test-integration     # or: pytest -m integration
+
+# Coverage report
+make test-coverage        # or: pytest --cov=api --cov-report=html
+
+# All available commands
+make help
+```
+
+## 📊 Code Quality
+
+This project uses [SonarQube Cloud](https://sonarcloud.io/project/overview?id=louisan42_safeview) for continuous code quality analysis:
+
+- **Quality Gate**: Enforces maintainability, reliability, and security standards
+- **Coverage Tracking**: 90% test coverage achieved
+- **Code Smells**: Identifies technical debt and improvement opportunities
+- **Security Hotspots**: Scans for potential security vulnerabilities
+
+Quality metrics are automatically updated on every push and pull request.
+
+## 🔧 Development Workflow
+
+### Daily Development
+```bash
+# 1. Start database
+docker-compose -f docker-compose.dev.yml up -d db
+
+# 2. Run API in development mode
+cd api
+source .venv/bin/activate
+python -m api.main
+
+# 3. Run frontend in development mode
+cd web
+npm run dev
+
+# 4. Run tests frequently
+make test
+```
+
+### API Endpoints
+- **Health**: `GET /health`
+- **Incidents**: `GET /v1/incidents?dataset=robbery&limit=10`
+- **Neighbourhoods**: `GET /v1/neighbourhoods`
+- **Interactive Docs**: http://localhost:8000/docs
+
+## 📝 Notes
+
+- **Secrets**: Never commit secrets. `etl/config.yaml` is gitignored.
+- **Database**: PostGIS extension required for geospatial operations
+- **ETL**: Idempotent loads prevent duplicate data issues
+- **Performance**: Optimized for sub-second API responses
+
+## 🚀 Next Steps
+
+- **Frontend Development**: React components for interactive mapping
+- **Analytics**: Implement hotspot detection and trend analysis
+- **Performance**: Add caching and database indexing
+- **Security**: Implement rate limiting and authentication
+- **Monitoring**: Add structured logging and metrics

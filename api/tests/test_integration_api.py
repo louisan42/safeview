@@ -1,28 +1,37 @@
 import os
-
 import pytest
 from fastapi.testclient import TestClient
 
 from api.main import app
 
+# Mark all tests in this file as integration tests
 pytestmark = pytest.mark.integration
 
-
-PG_DSN = os.getenv("PG_DSN")
-
-
-@pytest.fixture(autouse=True)
-def _require_pg_dsn():
-    if not PG_DSN:
-        pytest.skip("PG_DSN not set; integration test requires a live Postgres")
-
-
 def test_health_real_db():
+    """Integration test with real PostGIS - only runs in CI"""
     client = TestClient(app)
-    r = client.get("/v1/health")
+    r = client.get("/health")
     assert r.status_code == 200
     data = r.json()
     assert data["ok"] is True
+
+
+def test_incidents_real_db():
+    """Test incidents endpoint with real database"""
+    client = TestClient(app)
+    r = client.get("/v1/incidents?limit=1")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["type"] == "FeatureCollection"
+
+
+def test_neighbourhoods_real_db():
+    """Test neighbourhoods endpoint with real database"""
+    client = TestClient(app)
+    r = client.get("/v1/neighbourhoods")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["type"] == "FeatureCollection"
 
 
 def test_neighbourhoods_and_incidents_end_to_end():
