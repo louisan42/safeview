@@ -1,12 +1,22 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers.health import router as health_router
-from routers.incidents import router as incidents_router
-from routers.neighbourhoods import router as neighbourhoods_router
-from routers.stats import router as stats_router
-from routers.analytics import router as analytics_router
-from config import settings
+try:
+    # For Docker/production (running from /app directory)
+    from routers.health import router as health_router
+    from routers.incidents import router as incidents_router
+    from routers.neighbourhoods import router as neighbourhoods_router
+    from routers.stats import router as stats_router
+    from routers.analytics import router as analytics_router
+    from config import settings
+except ImportError:
+    # For tests/development (running from project root)
+    from api.routers.health import router as health_router
+    from api.routers.incidents import router as incidents_router
+    from api.routers.neighbourhoods import router as neighbourhoods_router
+    from api.routers.stats import router as stats_router
+    from api.routers.analytics import router as analytics_router
+    from api.config import settings
 
 app = FastAPI(
     title="SafetyView API",
