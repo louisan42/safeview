@@ -26,13 +26,13 @@ app = FastAPI(
     terms_of_service="https://github.com/louisan42/safeview/blob/main/LICENSE",
 )
 
-# CORS: permissive for now; tighten in deployment
+# CORS: restricted to known origins for security
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 app.include_router(health_router)

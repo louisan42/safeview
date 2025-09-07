@@ -1,12 +1,11 @@
 from datetime import datetime
-from typing import Any, Dict, List, Optional
-
-from fastapi import APIRouter, Query, HTTPException
+import os
+from typing import List, Optional, Any, Dict
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
-
 from ..db import cursor
 
-# Helper must be defined before route decorator to avoid being bound as the handler
+# Helper functions to reduce cognitive complexity
 def _parse_dt(val: str | None) -> datetime | None:
     """Parse ISO datetime or date string; treat empty/None as None. Supports 'Z'."""
     if not val:
@@ -14,16 +13,160 @@ def _parse_dt(val: str | None) -> datetime | None:
     s = val.strip()
     if not s:
         return None
+    # Support both 'Z' and '+00:00' timezone formats
+    if s.endswith('Z'):
+        s = s[:-1] + '+00:00'
+    # Try parsing as datetime first, then as date
+    for fmt in ["%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d"]:
+        try:
+            return datetime.strptime(s, fmt)
+        except ValueError:
+            continue
+    raise ValueError(f"Invalid date format: {val}")
+
+
+def _build_where_clause_and_params(
+    dataset: Optional[str],
+    date_from: Optional[str], 
+    date_to: Optional[str],
+    hood: Optional[str],
+    mci_category: Optional[str],
+    offence: Optional[str],
+    event_unique_id: Optional[str],
+    bbox: Optional[str]
+) -> tuple[str, list]:
+    """Build WHERE clause and parameters for incidents query."""
+    where = ["1=1"]
+    params = []
+
+    if dataset:
+        where.append("dataset = %s")
+        params.append(dataset)
+        
+    # Handle date filters
+    dt_from = _parse_dt(date_from)
+    dt_to = _parse_dt(date_to)
+    if dt_from:
+        where.append("report_date >= %s")
+        params.append(dt_from)
+    if dt_to:
+        where.append("report_date <= %s")
+        params.append(dt_to)
+    # Validate date range
+    if dt_from and dt_to and dt_from > dt_to:
+        raise HTTPException(status_code=422, detail="date_from cannot be after date_to")
+        
+    if hood:
+        where.append("hood_158 = %s")
+        params.append(hood)
+    if mci_category:
+        where.append("mci_category = %s")
+        params.append(mci_category)
+    if offence:
+        where.append("offence ILIKE %s")
+        params.append(f"%{offence}%")
+    if event_unique_id:
+        where.append("event_unique_id = %s")
+        params.append(event_unique_id)
+
+    # Handle bbox filter
+    if bbox:
+        bbox_sql, bbox_params = _parse_bbox(bbox)
+        where.append(bbox_sql)
+        params.extend(bbox_params)
+
+    return " AND ".join(where), params
+
+
+def _parse_bbox(bbox: str) -> tuple[str, list]:
+    """Parse and validate bbox parameter, return SQL and params."""
+    parts = bbox.split(",")
+    if len(parts) != 4:
+        raise HTTPException(status_code=422, detail="bbox must be 'minLon,minLat,maxLon,maxLat'")
     try:
-        # If date-only, make it start-of-day UTC
-        if len(s) == 10 and s.count('-') == 2:
-            return datetime.fromisoformat(s + 'T00:00:00+00:00')
-        # Normalize Z to +00:00 for fromisoformat
-        if s.endswith('Z'):
-            s = s[:-1] + '+00:00'
-        return datetime.fromisoformat(s)
+        minx, miny, maxx, maxy = [float(x) for x in parts]
+    except ValueError:
+        raise HTTPException(status_code=422, detail="bbox coordinates must be numbers")
+    if minx >= maxx or miny >= maxy:
+        raise HTTPException(status_code=422, detail="bbox must have min < max for both lon and lat")
+    
+    bbox_sql = "ST_Intersects(COALESCE(geom, ST_SetSRID(ST_MakePoint(lon,lat),4326)), ST_MakeEnvelope(%s,%s,%s,%s,4326))"
+    return bbox_sql, [minx, miny, maxx, maxy]
+
+
+def _get_order_clause(sort_by: Optional[str], sort_dir: Optional[str]) -> str:
+    """Get ORDER BY clause with whitelisted fields."""
+    order_field_map = {
+        "report_date": "report_date",
+        "occ_date": "occ_date",
+        "id": "id",
+    }
+    order_field = order_field_map.get((sort_by or "report_date").lower(), "report_date")
+    order_dir = "DESC" if (sort_dir or "desc").lower() == "desc" else "ASC"
+    return f"{order_field} {order_dir} NULLS LAST, id {order_dir}"
+
+
+async def _get_total_count(where_sql: str, params: list) -> int:
+    """Get total count of incidents matching filters."""
+    count_sql = f"SELECT COUNT(*) AS total FROM tps_incidents WHERE {where_sql}"
+    async with cursor() as cur:
+        await cur.execute(count_sql, params)
+        try:
+            total_row = await cur.fetchone()
+        except AttributeError:
+            rows_total = await cur.fetchall()
+            total_row = rows_total[0] if rows_total else {"total": 0}
+        return int(total_row["total"]) if total_row and "total" in total_row else 0
+
+
+async def _debug_log_counts(debug: bool, where_sql: str, params: list, bbox: Optional[str], total: int):
+    """Log debug information about query counts."""
+    if not debug or os.getenv("ENVIRONMENT") != "development":
+        return
+        
+    try:
+        print(f"[INCIDENTS][debug] where={where_sql} params={params}")
+        
+        async with cursor() as cur:
+            # Global count (no filters)
+            await cur.execute("SELECT COUNT(*) AS c, MIN(report_date) AS min_dt, MAX(report_date) AS max_dt FROM tps_incidents")
+            g = await cur.fetchone()
+            
+            # Bbox-only count (if bbox present)
+            bbox_only = None
+            if bbox:
+                bbox_sql, bbox_params = _parse_bbox(bbox)
+                await cur.execute(f"SELECT COUNT(*) AS c FROM tps_incidents WHERE {bbox_sql}", bbox_params)
+                bbox_row = await cur.fetchone()
+                bbox_only = int(bbox_row['c']) if bbox_row else None
+                
+            print(
+                f"[INCIDENTS][debug] total_filtered={total} total_global={int(g['c']) if g else 'n/a'} "
+                f"min_dt={g['min_dt'] if g else 'n/a'} max_dt={g['max_dt'] if g else 'n/a'} bbox_only={bbox_only}"
+            )
     except Exception:
-        return None
+        pass
+
+
+def _format_geojson_response(rows: list, total: int) -> dict:
+    """Format rows as GeoJSON FeatureCollection."""
+    if not rows:
+        return {"type": "FeatureCollection", "features": [], "total": total}
+        
+    features = []
+    for r in rows:
+        props = dict(r)
+        geom = props.pop("geometry", None)
+        if geom is None:
+            # Fallback for tests/mocks or missing geom: use lon/lat when available
+            lon_v = props.get("lon")
+            lat_v = props.get("lat")
+            if lon_v is not None and lat_v is not None:
+                geom = {"type": "Point", "coordinates": [float(lon_v), float(lat_v)]}
+        features.append({"type": "Feature", "geometry": geom, "properties": props})
+        
+    return {"type": "FeatureCollection", "features": features, "total": total}
+
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
@@ -57,18 +200,6 @@ class ErrorResponse(BaseModel):
     detail: str
 
 
-def _to_geojson(features: List[Dict[str, Any]]) -> Dict[str, Any]:
-    return {
-        "type": "FeatureCollection",
-        "features": [
-            {
-                "type": "Feature",
-                "geometry": f.pop("geometry"),
-                "properties": f,
-            }
-            for f in features
-        ],
-    }
 
 
 @router.get(
@@ -135,104 +266,21 @@ async def list_incidents(
         examples={"sample": {"value": "desc"}},
     ),
 ):
-    where = ["1=1"]
-    params: List[Any] = []
+    # Build WHERE clause and parameters using helper function
+    where_sql, params = _build_where_clause_and_params(
+        dataset, date_from, date_to, hood, mci_category, offence, event_unique_id, bbox
+    )
+    
+    # Get ORDER BY clause using helper function
+    order_clause = _get_order_clause(sort_by, sort_dir)
+    
+    # Get total count
+    total = await _get_total_count(where_sql, params)
+    
+    # Debug logging
+    await _debug_log_counts(debug, where_sql, params, bbox, total)
 
-    if dataset:
-        where.append("dataset = %s")
-        params.append(dataset)
-    dt_from = _parse_dt(date_from)
-    dt_to = _parse_dt(date_to)
-    if dt_from:
-        where.append("report_date >= %s")
-        params.append(dt_from)
-    if dt_to:
-        where.append("report_date <= %s")
-        params.append(dt_to)
-    # Validate date range
-    if dt_from and dt_to and dt_from > dt_to:
-        raise HTTPException(status_code=422, detail="date_from cannot be after date_to")
-    if hood:
-        where.append("hood_158 = %s")
-        params.append(hood)
-    if mci_category:
-        where.append("mci_category = %s")
-        params.append(mci_category)
-    if offence:
-        where.append("offence ILIKE %s")
-        params.append(f"%{offence}%")
-    if event_unique_id:
-        where.append("event_unique_id = %s")
-        params.append(event_unique_id)
-
-    bbox_sql = None
-    if bbox:
-        parts = bbox.split(",")
-        if len(parts) != 4:
-            raise HTTPException(status_code=422, detail="bbox must be 'minLon,minLat,maxLon,maxLat'")
-        try:
-            minx, miny, maxx, maxy = [float(x) for x in parts]
-        except ValueError:
-            raise HTTPException(status_code=422, detail="bbox coordinates must be numbers")
-        if minx >= maxx or miny >= maxy:
-            raise HTTPException(status_code=422, detail="bbox must have min < max for both lon and lat")
-        bbox_sql = "ST_Intersects(COALESCE(geom, ST_SetSRID(ST_MakePoint(lon,lat),4326)), ST_MakeEnvelope(%s,%s,%s,%s,4326))"
-        params.extend([minx, miny, maxx, maxy])
-
-    if bbox_sql:
-        where.append(bbox_sql)
-
-    where_sql = " AND ".join(where)
-
-    # Whitelist ORDER BY
-    order_field_map = {
-        "report_date": "report_date",
-        "occ_date": "occ_date",
-        "id": "id",
-    }
-    order_field = order_field_map.get((sort_by or "report_date").lower(), "report_date")
-    order_dir = "DESC" if (sort_dir or "desc").lower() == "desc" else "ASC"
-
-    # Debug logging of filters
-    if debug:
-        try:
-            print(f"[INCIDENTS][debug] where={where_sql} params={params}")
-        except Exception:
-            pass
-
-    # Count total before pagination
-    count_sql = f"SELECT COUNT(*) AS total FROM tps_incidents WHERE {where_sql}"
-    async with cursor() as cur:
-        await cur.execute(count_sql, params)
-        # Some test cursors only implement fetchall(); support both.
-        try:
-            total_row = await cur.fetchone()
-        except AttributeError:
-            rows_total = await cur.fetchall()
-            total_row = rows_total[0] if rows_total else {"total": 0}
-        total = int(total_row["total"]) if total_row and "total" in total_row else 0
-        if debug:
-            try:
-                # Global count (no filters)
-                await cur.execute("SELECT COUNT(*) AS c, MIN(report_date) AS min_dt, MAX(report_date) AS max_dt FROM tps_incidents")
-                g = await cur.fetchone()
-                # Bbox-only count (if bbox present)
-                bbox_only = None
-                if bbox_sql:
-                    await cur.execute(
-                        f"SELECT COUNT(*) AS c FROM tps_incidents WHERE {bbox_sql}",
-                        params[-4:] if len(params) >= 4 else []
-                    )
-                    bbox_row = await cur.fetchone()
-                    bbox_only = int(bbox_row['c']) if bbox_row else None
-                print(
-                    f"[INCIDENTS][debug] total_filtered={total} total_global={int(g['c']) if g else 'n/a'} "
-                    f"min_dt={g['min_dt'] if g else 'n/a'} max_dt={g['max_dt'] if g else 'n/a'} bbox_only={bbox_only}"
-                )
-            except Exception:
-                pass
-
-    # Geo fields are nullable; build geometry only when lon/lat present, and emit GeoJSON directly
+    # Build and execute main query
     sql = f"""
         SELECT
           id,
@@ -251,31 +299,17 @@ async def list_incidents(
           )::json AS geometry
         FROM tps_incidents
         WHERE {where_sql}
-        ORDER BY {order_field} {order_dir} NULLS LAST, id {order_dir}
+        ORDER BY {order_clause}
         LIMIT %s OFFSET %s
     """
 
-    params.extend([limit, offset])
-
+    query_params = params + [limit, offset]
     async with cursor() as cur:
-        await cur.execute(sql, params)
+        await cur.execute(sql, query_params)
         rows = await cur.fetchall()
 
+    # Format response
     if as_geojson:
-        # Geometry already in GeoJSON via main query
-        if not rows:
-            return {"type": "FeatureCollection", "features": [], "total": total}
-        features = []
-        for r in rows:
-            props = dict(r)
-            geom = props.pop("geometry", None)
-            if geom is None:
-                # Fallback for tests/mocks or missing geom: use lon/lat when available
-                lon_v = props.get("lon")
-                lat_v = props.get("lat")
-                if lon_v is not None and lat_v is not None:
-                    geom = {"type": "Point", "coordinates": [float(lon_v), float(lat_v)]}
-            features.append({"type": "Feature", "geometry": geom, "properties": props})
-        return {"type": "FeatureCollection", "features": features, "total": total}
-
+        return _format_geojson_response(rows, total)
+    
     return {"rows": rows, "count": len(rows), "total": total}

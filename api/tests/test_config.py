@@ -9,12 +9,12 @@ class TestConfig:
     """Test configuration loading and fallback mechanisms"""
     
     def test_config_defaults(self):
-        """Test default configuration values"""
+        """Test that configuration defaults are set correctly."""
         with patch.dict(os.environ, {}, clear=True):
             with patch('api.config.Settings._fallback_pg_dsn_from_yaml', return_value=None):
                 settings = Settings()
-                assert settings.CORS_ORIGINS == ["*"]
                 assert settings.PG_DSN is None
+                assert settings.CORS_ORIGINS == ["http://localhost:3000", "http://localhost:5173"]
     
     def test_config_from_env(self):
         """Test configuration from environment variables"""

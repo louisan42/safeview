@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     PG_DSN: Optional[str] = None
 
     # Allowed CORS origins for the frontend
-    CORS_ORIGINS: List[str] = ["*"]
+    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173"]
 
     # Pydantic v2 config
     model_config = SettingsConfigDict(
