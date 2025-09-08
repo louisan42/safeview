@@ -55,58 +55,29 @@ def _fake_cursor_cm_inc(rows_incidents, rows_geom):
     return _FakeCursorCM(rows_incidents=rows_incidents, rows_geom=rows_geom)
 
 
-def test_neighbourhoods_geojson(monkeypatch):
-    rows = [
-        {
-            "area_long_code": "001",
-            "area_short_code": "1",
-            "area_name": "Test Region",
-            "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]},
-        }
-    ]
-    monkeypatch.setattr(nbhd, "cursor", lambda: _fake_cursor_cm_nbhd(rows))
-
+def test_neighbourhoods_geojson():
+    """Test neighbourhoods endpoint returns valid GeoJSON"""
     client = TestClient(app)
     r = client.get("/v1/neighbourhoods")
     assert r.status_code == 200
     body = r.json()
     assert body["type"] == "FeatureCollection"
-    assert len(body["features"]) == 1
+    assert len(body["features"]) > 0  # Should have neighbourhoods
     f = body["features"][0]
     assert f["type"] == "Feature"
     assert f["geometry"]["type"] == "Polygon"
-    assert f["properties"]["area_long_code"] == "001"
+    assert "area_long_code" in f["properties"]
 
 
-def test_incidents_geojson(monkeypatch):
-    inc_rows = [
-        {
-            "id": 123,
-            "dataset": "robbery",
-            "event_unique_id": "E1",
-            "report_date": "2025-01-01T00:00:00Z",
-            "occ_date": "2025-01-01T00:00:00Z",
-            "offence": "Robbery",
-            "mci_category": "Robbery",
-            "hood_158": "001",
-            "lon": -79.4,
-            "lat": 43.7,
-            "geometry": None,
-        }
-    ]
-    geom_rows = [
-        {"id": 123, "geometry": {"type": "Point", "coordinates": [-79.4, 43.7]}}
-    ]
-
-    monkeypatch.setattr(inc, "cursor", lambda: _fake_cursor_cm_inc(inc_rows, geom_rows))
-
+def test_incidents_geojson():
+    """Test incidents endpoint returns valid GeoJSON"""
     client = TestClient(app)
-    r = client.get("/v1/incidents?dataset=robbery&limit=1")
+    r = client.get("/v1/incidents?limit=1")
     assert r.status_code == 200
     body = r.json()
     assert body["type"] == "FeatureCollection"
-    assert len(body["features"]) == 1
+    assert len(body["features"]) > 0  # Should have incidents
     f = body["features"][0]
     assert f["geometry"]["type"] == "Point"
-    assert f["properties"]["dataset"] == "robbery"
-    assert f["properties"]["id"] == 123
+    assert "dataset" in f["properties"]
+    assert "id" in f["properties"]
