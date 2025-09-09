@@ -2,21 +2,26 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (curl needed for healthcheck), build tools for psycopg, and libpq runtime
 RUN apt-get update && apt-get install -y \
-    gcc \
+    curl \
     g++ \
+    gcc \
+    libpq5 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
-COPY api/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY api/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# Copy API code
-COPY api/ .
+# Copy API code into package path /app/api so 'api.*' imports work
+COPY api/ /app/api/
+
+# Ensure Python can import from /app
+ENV PYTHONPATH=/app
 
 # Expose port
 EXPOSE 8888
 
-# Run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8888"]
+# Run the application via module path
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8888"]

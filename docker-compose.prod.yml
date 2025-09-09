@@ -16,6 +16,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.web
+      args:
+        VITE_API_BASE_URL: /api
     ports:
       - "3000:80"
     depends_on:

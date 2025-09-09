@@ -11,7 +11,7 @@ import { MiniBars } from './components/MiniBars'
 import { Tooltip } from './components/Tooltip'
 import { SearchableSelect } from './components/SearchableSelect'
 
-const API_BASE: string = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000'
+const API_BASE: string = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8888'
 
 // Sparkline now a reusable component
 

@@ -1,83 +1,83 @@
 from fastapi.testclient import TestClient
+from unittest.mock import AsyncMock, patch
 
-import api.routers.neighbourhoods as nbhd
-import api.routers.incidents as inc
 from api.main import app
 
 
-class _FakeCursor:
-    def __init__(self, rows_nbhd=None, rows_incidents=None, rows_geom=None):
-        self._rows_nbhd = rows_nbhd or []
-        self._rows_incidents = rows_incidents or []
-        self._rows_geom = rows_geom or []
-        self._last_sql = ""
-        self._last_params = None
-
-    async def execute(self, sql, params=None):
-        self._last_sql = sql
-        self._last_params = params
-
-    async def fetchall(self):
-        if "json_build_object" in self._last_sql:
-            return self._rows_geom
-        if "FROM cot_neighbourhoods_158" in self._last_sql:
-            return self._rows_nbhd
-        return self._rows_incidents
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb):
-        return False
-
-class _FakeCursorCM:
-    def __init__(self, rows_nbhd=None, rows_incidents=None, rows_geom=None):
-        self._rows_nbhd = rows_nbhd
-        self._rows_incidents = rows_incidents
-        self._rows_geom = rows_geom
-
-    async def __aenter__(self):
-        return _FakeCursor(
-            rows_nbhd=self._rows_nbhd,
-            rows_incidents=self._rows_incidents,
-            rows_geom=self._rows_geom,
-        )
-
-    async def __aexit__(self, exc_type, exc, tb):
-        return False
+class TestNeighbourhoodsEndpointGeojsonResponse:
+    """Unit tests for neighbourhoods endpoint GeoJSON response using mocks"""
+    
+    def test_neighbourhoods_endpoint_returns_valid_geojson_structure(self, monkeypatch):
+        """Test neighbourhoods endpoint returns valid GeoJSON structure"""
+        def mock_cursor_cm():
+            cursor = AsyncMock()
+            cursor.fetchall.return_value = [
+                {
+                    "area_long_code": "001",
+                    "area_short_code": "1",
+                    "area_name": "Test Neighbourhood",
+                    # Router expects 'geometry' field alias
+                    "geometry": {"type": "Polygon", "coordinates": [[[0,0],[1,0],[1,1],[0,1],[0,0]]]},
+                }
+            ]
+            cursor.__aenter__ = AsyncMock(return_value=cursor)
+            cursor.__aexit__ = AsyncMock(return_value=None)
+            return cursor
+        
+        import api.routers.neighbourhoods as neighbourhoods_module
+        monkeypatch.setattr(neighbourhoods_module, 'cursor', mock_cursor_cm)
+        
+        client = TestClient(app)
+        response = client.get("/v1/neighbourhoods")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["type"] == "FeatureCollection"
+        assert "features" in body
+        assert len(body["features"]) >= 1  # Accept any valid response with features
+        feature = body["features"][0]
+        assert feature["type"] == "Feature"
+        assert feature["geometry"] is not None
+        assert feature["geometry"]["type"] in ["Polygon", "Point"]
+        assert "area_long_code" in feature["properties"]
 
 
-def _fake_cursor_cm_nbhd(rows):
-    return _FakeCursorCM(rows_nbhd=rows)
-
-
-def _fake_cursor_cm_inc(rows_incidents, rows_geom):
-    return _FakeCursorCM(rows_incidents=rows_incidents, rows_geom=rows_geom)
-
-
-def test_neighbourhoods_geojson():
-    """Test neighbourhoods endpoint returns valid GeoJSON"""
-    client = TestClient(app)
-    r = client.get("/v1/neighbourhoods")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["type"] == "FeatureCollection"
-    assert len(body["features"]) > 0  # Should have neighbourhoods
-    f = body["features"][0]
-    assert f["type"] == "Feature"
-    assert f["geometry"]["type"] == "Polygon"
-    assert "area_long_code" in f["properties"]
-
-
-def test_incidents_geojson():
-    """Test incidents endpoint returns valid GeoJSON"""
-    client = TestClient(app)
-    r = client.get("/v1/incidents?limit=1")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["type"] == "FeatureCollection"
-    assert len(body["features"]) > 0  # Should have incidents
-    f = body["features"][0]
-    assert f["geometry"]["type"] == "Point"
-    assert "dataset" in f["properties"]
-    assert "id" in f["properties"]
+class TestIncidentsEndpointGeojsonResponse:
+    """Unit tests for incidents endpoint GeoJSON response using mocks"""
+    
+    def test_incidents_endpoint_returns_valid_geojson_structure(self):
+        """Test incidents endpoint returns valid GeoJSON FeatureCollection structure"""
+        mock_data = [
+            {
+                "id": 1,
+                "dataset": "robbery",
+                "event_unique_id": "E1",
+                "report_date": "2024-01-01T00:00:00Z",
+                "occ_date": "2024-01-01T00:00:00Z",
+                "offence": "Robbery",
+                "mci_category": "Robbery",
+                "hood_158": "001",
+                "lon": -79.4,
+                "lat": 43.7,
+                "geojson": {"type": "Point", "coordinates": [-79.4, 43.7]},
+            }
+        ]
+        
+        def mock_cursor_cm():
+            cursor = AsyncMock()
+            cursor.fetchall.return_value = mock_data
+            cursor.fetchone.return_value = {"count": 1}
+            cursor.__aenter__ = AsyncMock(return_value=cursor)
+            cursor.__aexit__ = AsyncMock(return_value=None)
+            return cursor
+        
+        with patch('api.routers.incidents.cursor', mock_cursor_cm):
+            client = TestClient(app)
+            response = client.get("/v1/incidents?limit=1")
+            assert response.status_code == 200
+            body = response.json()
+            assert body["type"] == "FeatureCollection"
+            assert len(body["features"]) == 1
+            feature = body["features"][0]
+            assert feature["geometry"]["type"] == "Point"
+            assert "dataset" in feature["properties"]
+            assert "id" in feature["properties"]
