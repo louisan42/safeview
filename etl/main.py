@@ -73,8 +73,16 @@ def load_config() -> dict:
     return cfg
 
 
-def _epoch_ms(dt: datetime) -> int:
-    return int(dt.timestamp() * 1000)
+def _hood_code(val: object) -> str:
+    s = str(val or '').strip()
+    if s.isdigit() and len(s) <= 3:
+        return s.zfill(3)
+    return s
+
+
+def _date_where(dt: datetime) -> str:
+    # TPS FeatureServers reject epoch-ms literals (HTTP 400) but accept DATE 'YYYY-MM-DD'.
+    return f"REPORT_DATE >= DATE '{dt.date().isoformat()}'"
 
 
 def incidents_where(window_days: int, etl_cfg: dict) -> str:
@@ -84,11 +92,10 @@ def incidents_where(window_days: int, etl_cfg: dict) -> str:
         if start:
             # Expect YYYY-MM-DD; assume 00:00:00Z
             dt = datetime.fromisoformat(start).replace(tzinfo=timezone.utc)
-            return f"REPORT_DATE >= {_epoch_ms(dt)}"
+            return _date_where(dt)
         return "1=1"
-    # Regular incremental: epoch-ms cutoff
     cutoff = datetime.now(timezone.utc) - timedelta(days=int(window_days))
-    return f"REPORT_DATE >= {_epoch_ms(cutoff)}"
+    return _date_where(cutoff)
 
 
 def run():
@@ -135,37 +142,41 @@ def run():
     backoff = int(etl.get('retry_backoff_seconds', 2))
 
     where = incidents_where(window_days, etl)
+    neighbourhoods_only = os.getenv('ETL_NEIGHBOURHOODS_ONLY', '').lower() in ('1', 'true', 'yes', 'on')
 
     conn = connect(pg_dsn)
     totals = {"inserted": 0, "datasets": {}}
     try:
         ensure_tables(conn)
         # Incidents
-        for dataset, url in services.items():
-            print(f"[ETL] Fetching {dataset} from {url}")
-            print(f"[ETL] Using WHERE: {where}")
-            t0 = perf_counter()
-            rows = fetch_paginated(
-                service_url=url,
-                where=where,
-                fields=FIELDS,
-                batch_size=batch_size,
-                max_retries=max_retries,
-                backoff=backoff,
-            )
-            buf = build_incidents_csv(dataset, rows)
-            text = buf.getvalue()
-            if text == '':
-                print(f"[ETL] No rows for {dataset} (window_days={window_days}, backfill={bool(etl.get('backfill', False))}).")
-                totals["datasets"][dataset] = {"rows": 0, "seconds": 0}
-                continue
-            row_count = text.count('\n') if text else 0
-            copy_incidents_csv(conn, buf)
-            post_load_cleanup(conn)
-            dur = perf_counter() - t0
-            totals["datasets"][dataset] = {"rows": row_count, "seconds": round(dur, 2)}
-            totals["inserted"] += row_count
-            print(f"[ETL] Upserted {dataset}: rows={row_count}, time={dur:.2f}s.")
+        if neighbourhoods_only:
+            print("[ETL] ETL_NEIGHBOURHOODS_ONLY set — skipping incident fetch.")
+        else:
+            for dataset, url in services.items():
+                print(f"[ETL] Fetching {dataset} from {url}")
+                print(f"[ETL] Using WHERE: {where}")
+                t0 = perf_counter()
+                rows = fetch_paginated(
+                    service_url=url,
+                    where=where,
+                    fields=FIELDS,
+                    batch_size=batch_size,
+                    max_retries=max_retries,
+                    backoff=backoff,
+                )
+                buf = build_incidents_csv(dataset, rows)
+                text = buf.getvalue()
+                if text == '':
+                    print(f"[ETL] No rows for {dataset} (window_days={window_days}, backfill={bool(etl.get('backfill', False))}).")
+                    totals["datasets"][dataset] = {"rows": 0, "seconds": 0}
+                    continue
+                row_count = text.count('\n') if text else 0
+                copy_incidents_csv(conn, buf)
+                post_load_cleanup(conn)
+                dur = perf_counter() - t0
+                totals["datasets"][dataset] = {"rows": row_count, "seconds": round(dur, 2)}
+                totals["inserted"] += row_count
+                print(f"[ETL] Upserted {dataset}: rows={row_count}, time={dur:.2f}s.")
 
         # Neighbourhood polygons
         if nbhd_cfg:
@@ -180,14 +191,12 @@ def run():
                 geom = f.get('geometry')
                 if not geom:
                     continue
-                rows.append(
-                    (
-                        str(props.get('AREA_LONG_CODE', '')),
-                        str(props.get('AREA_SHORT_CODE', '')),
-                        str(props.get('AREA_NAME', '')),
-                        json.dumps(geom),
-                    )
-                )
+                long_code = _hood_code(props.get('AREA_LONG_CODE', ''))
+                short_code = _hood_code(props.get('AREA_SHORT_CODE', ''))
+                name = str(props.get('AREA_NAME', '') or '').strip()
+                if not long_code:
+                    continue
+                rows.append((long_code, short_code, name, json.dumps(geom)))
             if rows:
                 upsert_neighbourhoods(conn, rows)
                 dur = perf_counter() - t0
@@ -206,8 +215,13 @@ def run():
             with conn.cursor() as cur:
                 cur.execute("SELECT MIN(report_date) AS min_dt, MAX(report_date) AS max_dt FROM tps_incidents")
                 row = cur.fetchone()
-                min_dt = row["min_dt"].isoformat() if row and row.get("min_dt") else None
-                max_dt = row["max_dt"].isoformat() if row and row.get("max_dt") else None
+                min_raw = max_raw = None
+                if isinstance(row, dict):
+                    min_raw, max_raw = row.get("min_dt"), row.get("max_dt")
+                elif row:
+                    min_raw, max_raw = row[0], row[1]
+                min_dt = min_raw.isoformat() if min_raw else None
+                max_dt = max_raw.isoformat() if max_raw else None
             set_metadata(conn, 'last_etl_run_at', datetime.utcnow().replace(tzinfo=timezone.utc).isoformat())
             if min_dt:
                 set_metadata(conn, 'db_min_report_date', min_dt)

@@ -6,13 +6,14 @@ from datetime import datetime, timezone
 import requests
 
 DEFAULT_TIMEOUT = 60
+NEIGHBOURHOODS_TIMEOUT = 180
 
 
-def _retry_request(url: str, params: Dict, max_retries: int, backoff: int):
+def _retry_request(url: str, params: Dict, max_retries: int, backoff: int, timeout: int = DEFAULT_TIMEOUT):
     attempt = 0
     while True:
         try:
-            r = requests.get(url, params=params, timeout=DEFAULT_TIMEOUT)
+            r = requests.get(url, params=params, timeout=timeout)
             r.raise_for_status()
             return r
         except requests.RequestException:
@@ -35,6 +36,8 @@ def fetch_paginated(service_url: str, where: str, fields: str, batch_size: int, 
         }
         resp = _retry_request(service_url, params, max_retries, backoff)
         data = resp.json()
+        if data.get('error'):
+            raise RuntimeError(f"ArcGIS query failed for {service_url}: {data['error']} where={where}")
         feats = data.get('features', [])
         if not feats:
             break
@@ -85,21 +88,31 @@ def build_incidents_csv(dataset: str, rows: Iterable[Dict]) -> io.StringIO:
 def fetch_neighbourhoods_geojson(url: str, fields: str, max_retries: int, backoff: int) -> List[Dict[str, Any]]:
     """
     Returns a list of GeoJSON Feature dicts with properties and geometry (EPSG:4326).
+    Paginates so the full 158-neighbourhood layer is loaded, not a truncated page.
     """
-    params = {
-        'where': '1=1',
-        'outFields': fields,
-        'returnGeometry': 'true',
-        'outSR': 4326,
-        'f': 'geojson',
-    }
-    resp = _retry_request(url, params, max_retries, backoff)
-    data = resp.json()
-    feats = data.get('features', [])
-    # Normalize property keys we use downstream
+    offset = 0
+    feats: List[Dict[str, Any]] = []
+    while True:
+        params = {
+            'where': '1=1',
+            'outFields': fields,
+            'returnGeometry': 'true',
+            'outSR': 4326,
+            'f': 'geojson',
+            'resultRecordCount': 2000,
+            'resultOffset': offset,
+        }
+        resp = _retry_request(url, params, max_retries, backoff, timeout=NEIGHBOURHOODS_TIMEOUT)
+        data = resp.json()
+        page = data.get('features', []) or []
+        if not page:
+            break
+        feats.extend(page)
+        if len(page) < 2000:
+            break
+        offset += len(page)
     for f in feats:
         props = f.get('properties', {})
-        # Sometimes keys vary in case; map to expected names if present
         for k in list(props.keys()):
             lk = k.upper()
             if lk == 'AREA_LONG_CODE' and k != 'AREA_LONG_CODE':

@@ -17,9 +17,15 @@ CREATE TABLE IF NOT EXISTS cot_neighbourhoods_158 (
   area_long_code text PRIMARY KEY,
   area_short_code text,
   area_name text,
-  geom geometry(Polygon, 4326)
+  geom geometry(MultiPolygon, 4326)
 );
 CREATE INDEX IF NOT EXISTS idx_cot_n158_geom ON cot_neighbourhoods_158 USING gist (geom);
+"""
+
+DDL_NEIGHBOURHOODS_GEOM = """
+ALTER TABLE cot_neighbourhoods_158
+  ALTER COLUMN geom TYPE geometry(MultiPolygon, 4326)
+  USING ST_Multi(ST_CollectionExtract(COALESCE(ST_MakeValid(geom), geom), 3));
 """
 
 DDL_INCIDENTS = """
@@ -90,6 +96,7 @@ def ensure_tables(conn):
         except Exception as e:
             print(f"[ETL][warn] Skipping CREATE EXTENSION postgis (permission or already installed): {e}")
         cur.execute(DDL_NEIGHBOURHOODS)
+        cur.execute(DDL_NEIGHBOURHOODS_GEOM)
         cur.execute(DDL_INCIDENTS)
         cur.execute(DDL_METADATA)
         # Create/refresh analytics views
@@ -163,20 +170,26 @@ def post_load_cleanup(conn):
 
 def upsert_neighbourhoods(conn, rows: List[Tuple[str, str, str, str]]):
     """
-    Insert/update neighbourhood polygons.
+    Replace neighbourhood polygons with the full reference layer.
     rows: list of (area_long_code, area_short_code, area_name, geom_geojson)
     """
     sql = (
         """
         INSERT INTO cot_neighbourhoods_158(area_long_code, area_short_code, area_name, geom)
-        VALUES (%s, %s, %s, ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326))
-        ON CONFLICT (area_long_code) DO UPDATE SET
-          area_short_code = EXCLUDED.area_short_code,
-          area_name = EXCLUDED.area_name,
-          geom = EXCLUDED.geom
+        VALUES (
+          %s, %s, %s,
+          ST_Multi(
+            ST_CollectionExtract(
+              ST_MakeValid(ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326)),
+              3
+            )
+          )
+        )
         """
     )
     with conn.cursor() as cur:
+        cur.execute(DDL_NEIGHBOURHOODS_GEOM)
+        cur.execute("DELETE FROM cot_neighbourhoods_158")
         cur.executemany(sql, rows)
     conn.commit()
 
