@@ -1,13 +1,24 @@
-import os
 import json
-import yaml
-from pathlib import Path
+import os
+import sys
+import traceback
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from time import perf_counter
-from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
-from etl.db import connect, ensure_tables, copy_incidents_csv, post_load_cleanup, upsert_neighbourhoods, set_metadata
-from etl.transform import fetch_paginated, build_incidents_csv, fetch_neighbourhoods_geojson
+import yaml
+
+from etl.db import (
+    connect,
+    copy_incidents_csv,
+    ensure_tables,
+    post_load_cleanup,
+    set_metadata,
+    upsert_neighbourhoods,
+)
+from etl.sanitize import dsn_safe_summary, redact_secrets, redacted_exception
+from etl.transform import build_incidents_csv, fetch_neighbourhoods_geojson, fetch_paginated
 
 FIELDS = 'EVENT_UNIQUE_ID,REPORT_DATE,OCC_DATE,OFFENCE,CSI_CATEGORY,HOOD_158,LONG_WGS84,LAT_WGS84'
 
@@ -102,23 +113,7 @@ def run():
     cfg = load_config()
     # Allow PG_DSN env override
     pg_dsn = os.getenv('PG_DSN') or cfg['pg_dsn']
-    # Diagnostics: parse DSN to log host/port/dbname/sslmode without secrets
-    def _redact_dsn_info(dsn: str) -> dict:
-        try:
-            u = urlparse(dsn)
-            q = parse_qs(u.query)
-            return {
-                'scheme': u.scheme,
-                'host': u.hostname,
-                'port': u.port,
-                'dbname': (u.path.lstrip('/') if u.path else None),
-                'sslmode': (q.get('sslmode', [''])[0] or None),
-            }
-        except Exception:
-            return {'scheme': None, 'host': None, 'port': None, 'dbname': None, 'sslmode': None}
-
-    info = _redact_dsn_info(pg_dsn)
-    print(f"[ETL] DB target host={info.get('host')} port={info.get('port')} db={info.get('dbname')} sslmode={info.get('sslmode')}")
+    print(f"[ETL] DB target {dsn_safe_summary(pg_dsn)}")
 
     # In CI, enforce sslmode=require if missing in URL-style DSN
     if os.getenv('GITHUB_ACTIONS', '').lower() == 'true':
@@ -229,7 +224,7 @@ def run():
                 set_metadata(conn, 'db_max_report_date', max_dt)
             print(f"[ETL] Metadata updated: last_etl_run_at, db_min_report_date={min_dt}, db_max_report_date={max_dt}")
         except Exception as e:
-            print(f"[ETL][warn] Could not update etl metadata: {e}")
+            print(f"[ETL][warn] Could not update etl metadata: {redacted_exception(e)}")
 
         # Data quality checks
         hard_fail = False
@@ -261,7 +256,7 @@ def run():
                         f.write(f"| {ds} | {m['rows']} | {m['seconds']} |\n")
                     f.write(f"\n**Total incident rows processed:** {totals['inserted']}\n")
             except Exception as e:
-                print(f"[ETL][warn] Could not write step summary: {e}")
+                print(f"[ETL][warn] Could not write step summary: {redacted_exception(e)}")
 
         if hard_fail:
             raise SystemExit(2)
@@ -270,4 +265,8 @@ def run():
 
 
 if __name__ == '__main__':
-    run()
+    try:
+        run()
+    except Exception:
+        print(redact_secrets(traceback.format_exc()), file=sys.stderr)
+        raise SystemExit(1) from None

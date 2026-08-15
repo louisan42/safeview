@@ -31,9 +31,67 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+      - name: Mask database secrets
+        env:
+          PG_DSN: ${{ secrets.PG_DSN }}
+        run: |
+          if [ -z "${PG_DSN}" ]; then
+            echo "PG_DSN secret is missing." >&2
+            exit 1
+          fi
+          echo "::add-mask::${PG_DSN}"
+          python3 - <<'PY'
+          import os
+          from urllib.parse import parse_qs, unquote, urlencode, urlparse, urlunparse
+
+          dsn = os.environ.get("PG_DSN") or ""
+          generic = {
+              "postgres",
+              "postgresql",
+              "railway",
+              "require",
+              "public",
+              "sslmode",
+          }
+
+          def mask(value: str) -> None:
+              value = (value or "").strip()
+              if len(value) < 4 or value.lower() in generic:
+                  return
+              print(f"::add-mask::{value}")
+
+          mask(dsn)
+          parsed = urlparse(dsn)
+          if parsed.password:
+              mask(parsed.password)
+              mask(unquote(parsed.password))
+          if parsed.hostname:
+              mask(parsed.hostname)
+          if parsed.username and ("." in parsed.username or len(parsed.username) > 12):
+              mask(parsed.username)
+              mask(unquote(parsed.username))
+          if parsed.scheme and parsed.netloc:
+              query = parse_qs(parsed.query)
+              for sslmode in (None, "require"):
+                  q = dict(query)
+                  if sslmode:
+                      q["sslmode"] = [sslmode]
+                  reconstructed = urlunparse(
+                      (
+                          parsed.scheme,
+                          parsed.netloc,
+                          parsed.path,
+                          parsed.params,
+                          urlencode(q, doseq=True),
+                          parsed.fragment,
+                      )
+                  )
+                  mask(reconstructed)
+          PY
+
       - name: Checkout
         uses: actions/checkout@v4
-        
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:

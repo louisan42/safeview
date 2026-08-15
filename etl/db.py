@@ -1,5 +1,11 @@
-import psycopg
 from typing import List, Tuple
+
+import psycopg
+
+try:
+    from etl.sanitize import redact_secrets
+except ImportError:
+    from sanitize import redact_secrets
 
 DDL_ENABLE_POSTGIS = """
 CREATE EXTENSION IF NOT EXISTS postgis;
@@ -84,7 +90,12 @@ WHERE t.ctid = d.ctid AND d.rn > 1;
 """
 
 def connect(pg_dsn: str):
-    return psycopg.connect(pg_dsn, options='-c idle_in_transaction_session_timeout=0')
+    try:
+        return psycopg.connect(pg_dsn, options='-c idle_in_transaction_session_timeout=0')
+    except Exception as exc:
+        masked = redact_secrets(str(exc))
+        exc.args = (masked, *exc.args[1:])
+        raise
 
 
 def ensure_tables(conn):
@@ -94,7 +105,10 @@ def ensure_tables(conn):
         try:
             cur.execute(DDL_ENABLE_POSTGIS)
         except Exception as e:
-            print(f"[ETL][warn] Skipping CREATE EXTENSION postgis (permission or already installed): {e}")
+            print(
+                f"[ETL][warn] Skipping CREATE EXTENSION postgis "
+                f"(permission or already installed): {redact_secrets(str(e))}"
+            )
         cur.execute(DDL_NEIGHBOURHOODS)
         cur.execute(DDL_NEIGHBOURHOODS_GEOM)
         cur.execute(DDL_INCIDENTS)
@@ -103,7 +117,7 @@ def ensure_tables(conn):
         try:
             cur.execute(DDL_ANALYTICS_VIEWS)
         except Exception as e:
-            print(f"[ETL][warn] Skipping analytics views creation: {e}")
+            print(f"[ETL][warn] Skipping analytics views creation: {redact_secrets(str(e))}")
     conn.commit()
 
 

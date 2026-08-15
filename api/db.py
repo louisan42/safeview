@@ -20,7 +20,11 @@ _pool: Optional[psycopg.AsyncConnection] = None
 async def get_conn() -> psycopg.AsyncConnection:
     global _pool
     if _pool is None or _pool.closed:
-        _pool = await psycopg.AsyncConnection.connect(settings.PG_DSN)
+        try:
+            _pool = await psycopg.AsyncConnection.connect(settings.PG_DSN)
+        except psycopg.Error:
+            # Do not chain the original error — drivers often embed the DSN.
+            raise RuntimeError("database connection failed") from None
         try:
             _pool.autocommit = True  # avoid aborted transaction state across requests
         except Exception:
