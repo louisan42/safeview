@@ -71,17 +71,17 @@ The weekly GitHub Action uses `PG_DSN` (Railway public TCP) with secret masking.
 
 ## Deploy (Railway)
 
-Railway is connected to `louisan42/safeview` and **auto-deploys API and web on push to `main`**. There is no Coolify webhook and no Railway token in this repo.
+Railway is connected to this project. **CI runs on every pull request and on `main`**. After CI succeeds on `main`, `Production health check` curls the live API `/health` and the web origin.
+
+If a service's Railway **Source** is the GitHub repo, it can autodeploy on push to `main` (enable **Wait for CI** so a failing test run skips the deploy). If autodeploy is not enabled, deploy from this repo with `railway up --service api` / `--service web` (no tokens in git).
+
+There is no Coolify webhook and no Railway token in this repo.
 
 | Service | Dockerfile | Config | Port |
 | --- | --- | --- | --- |
 | api | `Dockerfile.api` | `railway.toml` | **8888** (`/health`) |
 | web | `Dockerfile.web` | `railway.web.toml` | **80** (nginx; `/api` proxied to the API) |
 | Postgres | Railway plugin | PostGIS enabled | private + public TCP |
-
-CI (`CI` workflow) runs on every pull request and on `main`. After CI succeeds on `main`, `Production health check` curls the live API `/health` and the web origin.
-
-Recommended Railway setting: enable **Wait for CI** on the api and web services so a failing test run skips the deploy.
 
 Web build uses `VITE_API_BASE_URL=/api`. At runtime set `API_UPSTREAM` on the web service to `${{api.RAILWAY_PRIVATE_DOMAIN}}:${{api.PORT}}`. Set `CORS_ORIGINS` on the API to include `https://web-production-69f87.up.railway.app`.
 

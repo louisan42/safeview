@@ -11,9 +11,10 @@ __pycache__/
 .env.*
 .pytest_cache/
 
-# IDE
+# IDE / agent
 .vscode/
 .idea/
+.cursor/
 
 # Local data / logs
 logs/

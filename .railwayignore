@@ -1,0 +1,13 @@
+.cursor/
+AGENTS.md
+.venv/
+web/dist/
+web/node_modules/
+etl/config.yaml
+.env
+.env.*
+htmlcov/
+coverage.xml
+test-results.xml
+.pytest_cache/
+__pycache__/
