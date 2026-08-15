@@ -12,7 +12,7 @@ on:
       window_days:
         description: 'Incidents window (days)'
         required: false
-        default: '7'
+        default: '90'
       backfill:
         description: 'Backfill mode (true/false)'
         required: false
@@ -47,7 +47,7 @@ jobs:
       - name: Run ETL
         env:
           PG_DSN: ${{ secrets.PG_DSN }}
-          ETL_WINDOW_DAYS: ${{ inputs.window_days || '7' }}
+          ETL_WINDOW_DAYS: ${{ inputs.window_days || '90' }}
           ETL_BACKFILL: ${{ inputs.backfill || 'false' }}
           ETL_BACKFILL_START: ${{ inputs.backfill_start || '' }}
         run: |

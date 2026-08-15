@@ -9,7 +9,7 @@ from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 from etl.db import connect, ensure_tables, copy_incidents_csv, post_load_cleanup, upsert_neighbourhoods, set_metadata
 from etl.transform import fetch_paginated, build_incidents_csv, fetch_neighbourhoods_geojson
 
-FIELDS = 'EVENT_UNIQUE_ID,REPORT_DATE,OCC_DATE,OFFENCE,MCI_CATEGORY,HOOD_158,LONG_WGS84,LAT_WGS84'
+FIELDS = 'EVENT_UNIQUE_ID,REPORT_DATE,OCC_DATE,OFFENCE,CSI_CATEGORY,HOOD_158,LONG_WGS84,LAT_WGS84'
 
 def load_config() -> dict:
     # Prefer ETL_CONFIG, else try etl/config.yaml next to this file

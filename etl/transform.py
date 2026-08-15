@@ -76,7 +76,7 @@ def build_incidents_csv(dataset: str, rows: Iterable[Dict]) -> io.StringIO:
             _safe(report_date),
             _safe(occ_date),
             _safe(a.get('OFFENCE')),
-            _safe(a.get('MCI_CATEGORY')),
+            _safe(a.get('CSI_CATEGORY') or a.get('MCI_CATEGORY')),
             _safe(a.get('HOOD_158')),
             _safe(a.get('LONG_WGS84')),
             _safe(a.get('LAT_WGS84')),
