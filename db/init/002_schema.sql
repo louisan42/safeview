@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS cot_neighbourhoods_158 (
   area_long_code text PRIMARY KEY,
   area_short_code text,
   area_name text,
-  geom geometry(Polygon, 4326)
+  geom geometry(MultiPolygon, 4326)
 );
 
 -- Incidents table

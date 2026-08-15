@@ -14,16 +14,35 @@ class TestConfig:
             with patch('api.config.Settings._fallback_pg_dsn_from_yaml', return_value=None):
                 settings = Settings()
                 assert settings.PG_DSN is None
-                assert settings.CORS_ORIGINS == ["http://localhost:3000", "http://localhost:5173"]
-    
+                assert settings.cors_origin_list == ["http://localhost:3000", "http://localhost:5173"]
+
     def test_config_from_env(self):
-        """Test configuration from environment variables"""
         with patch.dict(os.environ, {
             'PG_DSN': 'postgresql://test:test@localhost/test',
             'CORS_ORIGINS': '["http://localhost:3000"]'
         }):
             settings = Settings()
             assert settings.PG_DSN == 'postgresql://test:test@localhost/test'
+            assert settings.cors_origin_list == ["http://localhost:3000"]
+
+    def test_database_url_alias(self):
+        with patch.dict(os.environ, {
+            'DATABASE_URL': 'postgresql://from:env@localhost/dburl',
+        }, clear=True):
+            with patch('api.config.Settings._fallback_pg_dsn_from_yaml', return_value=None):
+                settings = Settings()
+                assert settings.PG_DSN == 'postgresql://from:env@localhost/dburl'
+
+    def test_cors_origins_comma_separated(self):
+        with patch.dict(os.environ, {
+            'CORS_ORIGINS': 'http://localhost:5173,https://example.up.railway.app',
+        }, clear=True):
+            with patch('api.config.Settings._fallback_pg_dsn_from_yaml', return_value=None):
+                settings = Settings()
+                assert settings.cors_origin_list == [
+                    'http://localhost:5173',
+                    'https://example.up.railway.app',
+                ]
     
     def test_yaml_fallback_mechanism(self):
         """Test YAML config fallback when PG_DSN not in env"""
@@ -38,19 +57,20 @@ other_setting: value
             yaml_path = f.name
         
         try:
-            # Mock the config path to point to our temp file
-            with patch('api.config.os.path.join', return_value=yaml_path):
-                with patch('api.config.os.path.exists', return_value=True):
-                    settings = Settings()
-                    assert settings.PG_DSN == 'postgresql://yaml:yaml@localhost/yaml_db'
+            with patch.dict(os.environ, {}, clear=True):
+                with patch('api.config.os.path.join', return_value=yaml_path):
+                    with patch('api.config.os.path.exists', return_value=True):
+                        settings = Settings()
+                        assert settings.PG_DSN == 'postgresql://yaml:yaml@localhost/yaml_db'
         finally:
             os.unlink(yaml_path)
     
     def test_yaml_fallback_no_file(self):
         """Test YAML fallback when file doesn't exist"""
-        with patch('api.config.os.path.exists', return_value=False):
-            settings = Settings()
-            assert settings.PG_DSN is None
+        with patch.dict(os.environ, {}, clear=True):
+            with patch('api.config.os.path.exists', return_value=False):
+                settings = Settings()
+                assert settings.PG_DSN is None
     
     def test_yaml_fallback_commented_line(self):
         """Test YAML fallback ignores commented lines"""
@@ -64,15 +84,17 @@ other_setting: value
             yaml_path = f.name
         
         try:
-            with patch('api.config.os.path.join', return_value=yaml_path):
-                with patch('api.config.os.path.exists', return_value=True):
-                    settings = Settings()
-                    assert settings.PG_DSN is None
+            with patch.dict(os.environ, {}, clear=True):
+                with patch('api.config.os.path.join', return_value=yaml_path):
+                    with patch('api.config.os.path.exists', return_value=True):
+                        settings = Settings()
+                        assert settings.PG_DSN is None
         finally:
             os.unlink(yaml_path)
     
     def test_yaml_fallback_exception_handling(self):
         """Test YAML fallback handles exceptions gracefully"""
-        with patch('api.config.os.path.join', side_effect=Exception("File error")):
-            settings = Settings()
-            assert settings.PG_DSN is None
+        with patch.dict(os.environ, {}, clear=True):
+            with patch('api.config.os.path.join', side_effect=Exception("File error")):
+                settings = Settings()
+                assert settings.PG_DSN is None

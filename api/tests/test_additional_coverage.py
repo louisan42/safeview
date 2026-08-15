@@ -32,7 +32,7 @@ class TestHealthRouterEndpoints:
     
     def test_health_endpoint_returns_correct_structure(self):
         """Test health router /health endpoint returns expected JSON structure"""
-        with patch('api.routers.health.ping') as mock_ping:
+        with patch('api.routers.health.ping', new_callable=AsyncMock) as mock_ping:
             mock_ping.return_value = True
             
             from api.main import app
@@ -50,7 +50,7 @@ class TestHealthRouterEndpoints:
     
     def test_health_endpoint_with_database_down(self):
         """Test health router /health endpoint when database is down"""
-        with patch('api.routers.health.ping') as mock_ping:
+        with patch('api.routers.health.ping', new_callable=AsyncMock) as mock_ping:
             mock_ping.return_value = False
             
             from api.main import app

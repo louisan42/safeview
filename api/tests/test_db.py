@@ -35,6 +35,5 @@ class TestDatabase:
                 import api.db
                 api.db._pool = None
                 
-                # psycopg raises TypeError when DSN is None, not AttributeError
-                with pytest.raises(TypeError):
+                with pytest.raises(RuntimeError, match="database connection failed"):
                     await get_conn()

@@ -1,21 +1,19 @@
-name: API Tests
+name: CI
 
 on:
   push:
-    paths:
-      - 'api/**'
-      - '.github/workflows/api-tests.yml'
+    branches: [main]
   pull_request:
-    paths:
-      - 'api/**'
+  workflow_dispatch:
 
 jobs:
-  test:
+  api-unit:
+    name: API unit tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Shallow clones should be disabled for better analysis
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -34,7 +32,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-  integration:
+  api-integration:
+    name: API integration tests
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -73,3 +72,21 @@ jobs:
           PG_DSN: postgresql://sv:sv@localhost:5432/sv
         run: |
           pytest -m integration api/tests
+
+  web-build:
+    name: Web build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install and build
+        working-directory: web
+        env:
+          VITE_API_BASE_URL: /api
+        run: |
+          npm ci
+          npm run build

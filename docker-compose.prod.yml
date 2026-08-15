@@ -4,7 +4,10 @@ services:
       context: .
       dockerfile: Dockerfile.api
     environment:
-      - PG_DSN=${DATABASE_URL}
+      PG_DSN: ${DATABASE_URL}
+      DATABASE_URL: ${DATABASE_URL}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      PORT: "8888"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8888/health"]
       interval: 30s
@@ -19,9 +22,10 @@ services:
       args:
         VITE_API_BASE_URL: /api
     ports:
-      - "3000:80"
+      - "8080:80"
     depends_on:
       - api
     environment:
-      - VITE_API_BASE_URL=/api
+      PORT: "80"
+      API_UPSTREAM: api:8888
     restart: unless-stopped

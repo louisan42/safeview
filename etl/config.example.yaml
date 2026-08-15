@@ -11,7 +11,7 @@ neighbourhoods:
   fields: AREA_LONG_CODE,AREA_SHORT_CODE,AREA_NAME
 
 etl:
-  incidents_window_days: 7
+  incidents_window_days: 90
   batch_size: 2000
   max_retries: 4
   retry_backoff_seconds: 2

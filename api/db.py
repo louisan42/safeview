@@ -4,12 +4,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 import psycopg
 from psycopg.rows import dict_row
 
-try:
-    # For Docker/production (running from /app directory)
-    from config import settings
-except ImportError:
-    # For tests/development (running from project root)
-    from api.config import settings
+from api.config import settings
 
 # Simple async connection pool using psycopg "async" connection
 # Note: psycopg (v3) supports async via psycopg.AsyncConnection
@@ -20,9 +15,12 @@ _pool: Optional[psycopg.AsyncConnection] = None
 async def get_conn() -> psycopg.AsyncConnection:
     global _pool
     if _pool is None or _pool.closed:
+        dsn = settings.PG_DSN
+        if not dsn:
+            raise RuntimeError("database connection failed")
         try:
-            _pool = await psycopg.AsyncConnection.connect(settings.PG_DSN)
-        except psycopg.Error:
+            _pool = await psycopg.AsyncConnection.connect(dsn)
+        except (psycopg.Error, TypeError, AttributeError):
             # Do not chain the original error — drivers often embed the DSN.
             raise RuntimeError("database connection failed") from None
         try:

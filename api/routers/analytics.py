@@ -4,12 +4,7 @@ from typing import List, Optional, Literal, Dict, Any
 from fastapi import APIRouter, Query, HTTPException
 from pydantic import BaseModel
 
-try:
-    # For Docker/production (running from /app directory)
-    from db import cursor
-except ImportError:
-    # For tests/development (running from project root)
-    from api.db import cursor
+from api.db import cursor
 
 router = APIRouter(prefix="/v1", tags=["analytics"])
 
@@ -47,19 +42,28 @@ class CompareResponse(BaseModel):
 VALID_INTERVALS = {"day": "day", "week": "week", "month": "month"}
 
 
-def _build_filters(dataset: Optional[str], mci_category: Optional[str], offence: Optional[str], bbox: Optional[str]):
+def _build_filters(
+    dataset: Optional[str],
+    mci_category: Optional[str],
+    offence: Optional[str],
+    bbox: Optional[str],
+    hood: Optional[str] = None,
+):
     clauses: List[str] = []
     params: List[Any] = []
 
     if dataset:
         params.append(dataset)
-        clauses.append(f"dataset = %s")
+        clauses.append("dataset = %s")
     if mci_category:
         params.append(mci_category)
-        clauses.append(f"mci_category = %s")
+        clauses.append("mci_category = %s")
     if offence:
         params.append(f"%{offence}%")
-        clauses.append(f"offence ILIKE %s")
+        clauses.append("offence ILIKE %s")
+    if hood:
+        params.append(hood)
+        clauses.append("hood_158 = %s")
     if bbox:
         try:
             west, south, east, north = [float(x) for x in bbox.split(",")]
@@ -73,12 +77,20 @@ def _build_filters(dataset: Optional[str], mci_category: Optional[str], offence:
     return where, params
 
 
-async def _run_analytics(date_from: datetime, date_to: datetime, interval: str,
-                         dataset: Optional[str], mci_category: Optional[str], offence: Optional[str], bbox: Optional[str]) -> AnalyticsResponse:
+async def _run_analytics(
+    date_from: datetime,
+    date_to: datetime,
+    interval: str,
+    dataset: Optional[str],
+    mci_category: Optional[str],
+    offence: Optional[str],
+    bbox: Optional[str],
+    hood: Optional[str] = None,
+) -> AnalyticsResponse:
     if interval not in VALID_INTERVALS:
         raise HTTPException(status_code=400, detail="interval must be one of day|week|month")
 
-    where_common, params = _build_filters(dataset, mci_category, offence, bbox)
+    where_common, params = _build_filters(dataset, mci_category, offence, bbox, hood)
 
     # Ensure date bounds
     params_total = params + [date_from, date_to]
@@ -125,8 +137,9 @@ async def analytics(
     mci_category: Optional[str] = Query(None),
     offence: Optional[str] = Query(None, description="ILIKE contains"),
     bbox: Optional[str] = Query(None, description="west,south,east,north"),
+    hood: Optional[str] = Query(None, description="Neighbourhood code (hood_158)"),
 ):
-    return await _run_analytics(date_from, date_to, interval, dataset, mci_category, offence, bbox)
+    return await _run_analytics(date_from, date_to, interval, dataset, mci_category, offence, bbox, hood)
 
 
 @router.get("/compare", response_model=CompareResponse, summary="Compare two incident time windows")
@@ -140,9 +153,10 @@ async def compare(
     mci_category: Optional[str] = Query(None),
     offence: Optional[str] = Query(None),
     bbox: Optional[str] = Query(None),
+    hood: Optional[str] = Query(None, description="Neighbourhood code (hood_158)"),
 ):
-    a = await _run_analytics(a_date_from, a_date_to, interval, dataset, mci_category, offence, bbox)
-    b = await _run_analytics(b_date_from, b_date_to, interval, dataset, mci_category, offence, bbox)
+    a = await _run_analytics(a_date_from, a_date_to, interval, dataset, mci_category, offence, bbox, hood)
+    b = await _run_analytics(b_date_from, b_date_to, interval, dataset, mci_category, offence, bbox, hood)
     delta = a.totals.total - b.totals.total
     pct = None
     if b.totals.total:

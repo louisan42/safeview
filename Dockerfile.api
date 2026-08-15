@@ -2,7 +2,6 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies (curl needed for healthcheck), build tools for psycopg, and libpq runtime
 RUN apt-get update && apt-get install -y \
     curl \
     g++ \
@@ -10,18 +9,16 @@ RUN apt-get update && apt-get install -y \
     libpq5 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
 COPY api/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# Copy API code into package path /app/api so 'api.*' imports work
 COPY api/ /app/api/
 
-# Ensure Python can import from /app
 ENV PYTHONPATH=/app
+ENV PORT=8888
 
-# Expose port
 EXPOSE 8888
 
-# Run the application via module path
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8888"]
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD curl -f http://localhost:${PORT:-8888}/health || exit 1
+
+CMD ["sh", "-c", "uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8888}"]

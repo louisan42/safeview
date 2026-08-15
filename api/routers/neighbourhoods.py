@@ -1,14 +1,10 @@
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Query, HTTPException
 from pydantic import BaseModel, Field
 
-try:
-    # For Docker/production (running from /app directory)
-    from db import cursor
-except ImportError:
-    # For tests/development (running from project root)
-    from api.db import cursor
+from api.db import cursor
 
 router = APIRouter(prefix="/neighbourhoods", tags=["neighbourhoods"])  # city-agnostic schema
 
@@ -160,3 +156,100 @@ async def list_neighbourhoods(
     fc = _fc(features)
     fc["total"] = total
     return fc
+
+
+def _incident_date_clauses(
+    date_from: Optional[datetime],
+    date_to: Optional[datetime],
+    dataset: Optional[str],
+    mci_category: Optional[str],
+) -> tuple[str, List[Any]]:
+    clauses: List[str] = []
+    params: List[Any] = []
+    if date_from:
+        clauses.append("i.report_date >= %s")
+        params.append(date_from)
+    if date_to:
+        clauses.append("i.report_date <= %s")
+        params.append(date_to)
+    if dataset:
+        clauses.append("i.dataset = %s")
+        params.append(dataset)
+    if mci_category:
+        clauses.append("i.mci_category = %s")
+        params.append(mci_category)
+    extra = (" AND " + " AND ".join(clauses)) if clauses else ""
+    return extra, params
+
+
+@router.get(
+    "/choropleth",
+    response_model=FeatureCollection,
+    summary="Neighbourhood polygons with incident counts for the current window",
+)
+async def choropleth(
+    date_from: Optional[datetime] = Query(None),
+    date_to: Optional[datetime] = Query(None),
+    dataset: Optional[str] = Query(None),
+    mci_category: Optional[str] = Query(None),
+):
+    extra, extra_params = _incident_date_clauses(date_from, date_to, dataset, mci_category)
+    sql = f"""
+        SELECT
+          n.area_long_code,
+          n.area_short_code,
+          n.area_name,
+          ST_AsGeoJSON(n.geom)::json AS geometry,
+          COUNT(i.id) AS incident_count
+        FROM cot_neighbourhoods_158 n
+        LEFT JOIN tps_incidents i
+          ON (i.hood_158 = n.area_long_code OR i.hood_158 = n.area_short_code)
+          {extra}
+        GROUP BY n.area_long_code, n.area_short_code, n.area_name, n.geom
+        ORDER BY n.area_long_code
+    """
+    async with cursor() as cur:
+        await cur.execute(sql, extra_params)
+        rows = await cur.fetchall()
+
+    features = [
+        {
+            "type": "Feature",
+            "geometry": r.get("geometry"),
+            "properties": {
+                "area_long_code": r.get("area_long_code"),
+                "area_short_code": r.get("area_short_code"),
+                "area_name": r.get("area_name"),
+                "incident_count": int(r.get("incident_count") or 0),
+            },
+        }
+        for r in rows
+    ]
+    fc = _fc(features)
+    fc["total"] = len(features)
+    return fc
+
+
+@router.get("/at", summary="Reverse-geocode a point to a neighbourhood")
+async def neighbourhood_at(
+    lng: float = Query(..., description="Longitude"),
+    lat: float = Query(..., description="Latitude"),
+):
+    sql = """
+        SELECT area_long_code, area_short_code, area_name
+        FROM cot_neighbourhoods_158
+        WHERE ST_Covers(geom, ST_SetSRID(ST_MakePoint(%s, %s), 4326))
+        LIMIT 1
+    """
+    async with cursor() as cur:
+        await cur.execute(sql, [lng, lat])
+        row = await cur.fetchone()
+    if not row:
+        return {"match": None}
+    return {
+        "match": {
+            "area_long_code": row.get("area_long_code"),
+            "area_short_code": row.get("area_short_code"),
+            "area_name": row.get("area_name"),
+        }
+    }

@@ -7,7 +7,7 @@ interface MiniBarsProps {
   className?: string
 }
 
-export const MiniBars: React.FC<MiniBarsProps> = ({ data, height = 28, barColor = '#2563eb', className }) => {
+export const MiniBars: React.FC<MiniBarsProps> = ({ data, height = 28, barColor = '#292524', className }) => {
   if (!data || data.length === 0) return null
   const max = Math.max(...data.map(d => d.count)) || 1
   return (

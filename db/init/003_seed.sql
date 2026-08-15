@@ -1,13 +1,14 @@
--- Seed minimal data for integration tests
+-- Seed minimal data for integration tests.
+-- Real Toronto 158-neighbourhood geometries are loaded by ETL (see etl/main.py).
+-- This one fixture polygon exists so API tests have a spatial row before ETL runs.
 
--- Insert a square neighbourhood polygon roughly around Toronto coordinates
 INSERT INTO cot_neighbourhoods_158 (area_long_code, area_short_code, area_name, geom)
 VALUES (
   '001', '1', 'Test Region',
-  ST_SetSRID(
+  ST_Multi(ST_SetSRID(
     ST_GeomFromText('POLYGON((-79.6 43.6, -79.3 43.6, -79.3 43.8, -79.6 43.8, -79.6 43.6))'),
     4326
-  )
+  ))
 ) ON CONFLICT (area_long_code) DO NOTHING;
 
 -- Insert a point incident inside that polygon

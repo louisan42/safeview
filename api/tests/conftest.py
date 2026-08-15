@@ -8,6 +8,18 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
+# Prefer a local PostGIS DSN in tests; never fall through to a remote DSN in etl/config.yaml
+if not os.environ.get("PG_DSN") and not os.environ.get("DATABASE_URL"):
+    os.environ["PG_DSN"] = "postgresql://sv:sv@localhost:55432/sv"
+
+
+@pytest.fixture(autouse=True)
+def _reset_db_pool():
+    import api.db
+    api.db._pool = None
+    yield
+    api.db._pool = None
+
 
 @pytest.fixture
 def mock_db_cursor():

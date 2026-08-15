@@ -37,7 +37,7 @@ class TestNeighbourhoodsEndpointGeojsonResponse:
         feature = body["features"][0]
         assert feature["type"] == "Feature"
         assert feature["geometry"] is not None
-        assert feature["geometry"]["type"] in ["Polygon", "Point"]
+        assert feature["geometry"]["type"] in ["Polygon", "MultiPolygon", "Point"]
         assert "area_long_code" in feature["properties"]
 
 
@@ -81,3 +81,46 @@ class TestIncidentsEndpointGeojsonResponse:
             assert feature["geometry"]["type"] == "Point"
             assert "dataset" in feature["properties"]
             assert "id" in feature["properties"]
+
+
+class TestChoroplethAndLookup:
+    def test_choropleth_returns_counts(self, monkeypatch):
+        def mock_cursor_cm():
+            cursor = AsyncMock()
+            cursor.fetchall.return_value = [
+                {
+                    "area_long_code": "001",
+                    "area_short_code": "1",
+                    "area_name": "Downtown Core",
+                    "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]},
+                    "incident_count": 4,
+                }
+            ]
+            cursor.__aenter__ = AsyncMock(return_value=cursor)
+            cursor.__aexit__ = AsyncMock(return_value=None)
+            return cursor
+
+        import api.routers.neighbourhoods as neighbourhoods_module
+        monkeypatch.setattr(neighbourhoods_module, "cursor", mock_cursor_cm)
+        client = TestClient(app)
+        response = client.get("/v1/neighbourhoods/choropleth?date_from=2025-01-01&date_to=2025-01-31")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["type"] == "FeatureCollection"
+        assert body["features"][0]["properties"]["incident_count"] == 4
+        assert body["features"][0]["properties"]["area_name"] == "Downtown Core"
+
+    def test_neighbourhood_at_miss(self, monkeypatch):
+        def mock_cursor_cm():
+            cursor = AsyncMock()
+            cursor.fetchone.return_value = None
+            cursor.__aenter__ = AsyncMock(return_value=cursor)
+            cursor.__aexit__ = AsyncMock(return_value=None)
+            return cursor
+
+        import api.routers.neighbourhoods as neighbourhoods_module
+        monkeypatch.setattr(neighbourhoods_module, "cursor", mock_cursor_cm)
+        client = TestClient(app)
+        response = client.get("/v1/neighbourhoods/at?lng=-79.4&lat=43.7")
+        assert response.status_code == 200
+        assert response.json()["match"] is None

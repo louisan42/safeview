@@ -1,7 +1,7 @@
 import React from 'react'
 
 export const Sparkline: React.FC<{ data: number[]; width?: number; height?: number; stroke?: string; className?: string }>
-  = ({ data, width = 96, height = 24, stroke = '#2563eb', className }) => {
+  = ({ data, width = 96, height = 24, stroke = '#292524', className }) => {
   if (!data || data.length === 0) return null
   const max = Math.max(...data)
   const min = Math.min(...data)

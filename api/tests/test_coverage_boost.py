@@ -19,7 +19,7 @@ class TestHealthEndpointErrorPaths:
     
     def test_health_endpoint_with_mocked_ping_success(self):
         """Test health endpoint when ping function returns True"""
-        with patch('api.routers.health.ping') as mock_ping:
+        with patch('api.routers.health.ping', new_callable=AsyncMock) as mock_ping:
             mock_ping.return_value = True
             
             client = TestClient(app)
@@ -77,7 +77,7 @@ class TestStatsEndpointErrorPaths:
             mock_cursor_instance.__aenter__.side_effect = Exception("Database error")
             mock_cursor.return_value = mock_cursor_instance
             
-            client = TestClient(app)
+            client = TestClient(app, raise_server_exceptions=False)
             response = client.get("/v1/stats")
             assert response.status_code in [200, 500]
 
@@ -166,7 +166,7 @@ class TestDbModulePingFunction:
     
     def test_db_ping_function_through_health_endpoint(self):
         """Test database ping function is called through health endpoint"""
-        with patch('api.routers.health.ping') as mock_ping:
+        with patch('api.routers.health.ping', new_callable=AsyncMock) as mock_ping:
             mock_ping.return_value = True
             
             client = TestClient(app)
@@ -207,7 +207,7 @@ class TestConfigModuleSettings:
         
         assert hasattr(settings, 'PG_DSN')
         assert hasattr(settings, 'CORS_ORIGINS')
-        assert isinstance(settings.CORS_ORIGINS, list)
+        assert isinstance(settings.cors_origin_list, list)
     
     def test_config_fallback_pg_dsn_from_yaml_function(self):
         """Test config module _fallback_pg_dsn_from_yaml function"""

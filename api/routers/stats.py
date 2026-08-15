@@ -3,12 +3,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-try:
-    # For Docker/production (running from /app directory)
-    from db import cursor
-except ImportError:
-    # For tests/development (running from project root)
-    from api.db import cursor
+from api.db import cursor
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
@@ -107,7 +102,9 @@ async def get_stats() -> Dict[str, Any]:
             SELECT to_char(date_trunc('day', report_date), 'YYYY-MM-DD') AS day,
                    COUNT(*) AS count
             FROM tps_incidents
-            WHERE report_date >= NOW() - INTERVAL '30 days'
+            WHERE report_date >= (
+              SELECT MAX(report_date) - INTERVAL '30 days' FROM tps_incidents
+            )
             GROUP BY 1
             ORDER BY 1
             """

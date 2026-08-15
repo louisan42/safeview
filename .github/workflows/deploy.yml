@@ -1,26 +1,54 @@
-name: Deploy to Coolify
+# Railway deploys API + web from GitHub on push to main
+# (project SafetyView, GitHub integration). This workflow does not hold
+# Railway tokens; it waits for CI and then checks production health.
+name: Production health check
 
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
-  deploy:
+  health:
+    name: Check Railway production
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 20
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    env:
+      API_URL: https://api-production-2c307.up.railway.app
+      WEB_URL: https://web-production-69f87.up.railway.app
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Wait for API /health
+        run: |
+          set -euo pipefail
+          echo "Waiting for ${API_URL}/health"
+          for i in $(seq 1 45); do
+            if body="$(curl -fsS --max-time 10 "${API_URL}/health" 2>/dev/null)"; then
+              echo "$body"
+              echo "$body" | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get('ok') else 1)"
+              echo "API healthy"
+              exit 0
+            fi
+            echo "attempt ${i}/45 not ready yet"
+            sleep 20
+          done
+          echo "API health check timed out" >&2
+          exit 1
 
-    - name: Trigger Coolify Deployment
-      run: |
-        curl -X POST "${{ secrets.COOLIFY_WEBHOOK_URL }}" \
-          -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
-          -H "Content-Type: application/json" \
-          -d '{
-            "ref": "${{ github.ref }}",
-            "sha": "${{ github.sha }}",
-            "repository": "${{ github.repository }}",
-            "pusher": "${{ github.actor }}"
-          }'
+      - name: Check web
+        run: |
+          set -euo pipefail
+          echo "Checking ${WEB_URL}"
+          for i in $(seq 1 30); do
+            code="$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 "${WEB_URL}/" || true)"
+            if [ "$code" = "200" ]; then
+              echo "Web healthy (HTTP ${code})"
+              exit 0
+            fi
+            echo "attempt ${i}/30 HTTP ${code}"
+            sleep 10
+          done
+          echo "Web health check timed out" >&2
+          exit 1

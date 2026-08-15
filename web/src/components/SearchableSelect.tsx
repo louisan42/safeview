@@ -13,12 +13,12 @@ interface SearchableSelectProps {
   className?: string
 }
 
-export const SearchableSelect: React.FC<SearchableSelectProps> = ({ 
-  options, 
-  value, 
-  onChange, 
-  placeholder = "Search...", 
-  className = "" 
+export const SearchableSelect: React.FC<SearchableSelectProps> = ({
+  options,
+  value,
+  onChange,
+  placeholder = 'Search...',
+  className = '',
 }) => {
   const [isOpen, setIsOpen] = React.useState(false)
   const [search, setSearch] = React.useState('')
@@ -28,13 +28,14 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
 
   const filteredOptions = React.useMemo(() => {
     if (!search) return options
-    return options.filter(opt => 
-      opt.label.toLowerCase().includes(search.toLowerCase()) ||
-      opt.value.toLowerCase().includes(search.toLowerCase())
+    return options.filter(
+      (opt) =>
+        opt.label.toLowerCase().includes(search.toLowerCase()) ||
+        opt.value.toLowerCase().includes(search.toLowerCase()),
     )
   }, [options, search])
 
-  const selectedOption = options.find(opt => opt.value === value)
+  const selectedOption = options.find((opt) => opt.value === value)
 
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -69,11 +70,11 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
         break
       case 'ArrowDown':
         e.preventDefault()
-        setHighlightedIndex(prev => Math.min(prev + 1, filteredOptions.length - 1))
+        setHighlightedIndex((prev) => Math.min(prev + 1, filteredOptions.length - 1))
         break
       case 'ArrowUp':
         e.preventDefault()
-        setHighlightedIndex(prev => Math.max(prev - 1, 0))
+        setHighlightedIndex((prev) => Math.max(prev - 1, 0))
         break
       case 'Enter':
         e.preventDefault()
@@ -83,6 +84,9 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
           setSearch('')
         }
         break
+      default: {
+        break
+      }
     }
   }
 
@@ -95,7 +99,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
   return (
     <div ref={containerRef} className={`relative ${className}`}>
       <div
-        className="w-full border border-slate-200 rounded-md px-3 py-2 text-sm bg-white cursor-pointer focus-within:ring-2 focus-within:ring-blue-200 focus-within:border-blue-300"
+        className="sv-input flex w-full cursor-pointer items-center rounded-md px-3 focus-within:border-sv-accent"
         onClick={() => setIsOpen(!isOpen)}
       >
         {isOpen ? (
@@ -106,14 +110,14 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
-            className="w-full outline-none bg-transparent"
+            className="h-full w-full bg-transparent outline-none"
           />
         ) : (
-          <div className="flex items-center justify-between">
-            <span className={selectedOption ? 'text-slate-900' : 'text-slate-500'}>
+          <div className="flex w-full items-center justify-between">
+            <span className={selectedOption ? 'text-sv-ink' : 'text-sv-muted'}>
               {selectedOption?.label || placeholder}
             </span>
-            <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-4 w-4 text-sv-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </div>
@@ -121,16 +125,18 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
       </div>
 
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-60 overflow-y-auto">
+        <div className="sv-panel absolute left-0 right-0 top-full z-50 mt-1 max-h-60 overflow-y-auto rounded-md">
           {filteredOptions.length === 0 ? (
-            <div className="px-3 py-2 text-sm text-slate-500">No options found</div>
+            <div className="px-3 py-2.5 text-sm text-sv-muted">No options found</div>
           ) : (
             filteredOptions.map((option, index) => (
               <div
                 key={option.value}
-                className={`px-3 py-2 text-sm cursor-pointer ${
-                  index === highlightedIndex ? 'bg-blue-50 text-blue-900' : 'text-slate-900 hover:bg-slate-50'
-                } ${option.value === value ? 'bg-blue-100 font-medium' : ''}`}
+                className={[
+                  'min-h-[44px] cursor-pointer px-3 py-2.5 text-sm',
+                  index === highlightedIndex ? 'bg-sv-accent-soft text-sv-ink' : 'text-sv-ink hover:bg-sv-paper-2',
+                  option.value === value ? 'font-medium' : '',
+                ].join(' ')}
                 onClick={() => handleOptionClick(option.value)}
                 onMouseEnter={() => setHighlightedIndex(index)}
               >

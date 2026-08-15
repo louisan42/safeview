@@ -1,13 +1,6 @@
 from fastapi import APIRouter
 
-try:
-    # For Docker/production (running from /app directory)
-    from db import ping
-    from config import settings
-except ImportError:
-    # For tests/development (running from project root)
-    from api.db import ping
-    from api.config import settings
+from api.db import ping
 
 router = APIRouter(tags=["health"])
 

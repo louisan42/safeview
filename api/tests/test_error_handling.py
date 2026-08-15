@@ -17,7 +17,7 @@ class TestIncidentsEndpointErrorHandling:
             return cursor_mock
         
         with patch('api.routers.incidents.cursor', mock_failing_cursor):
-            client = TestClient(app)
+            client = TestClient(app, raise_server_exceptions=False)
             response = client.get("/v1/incidents")
             assert response.status_code in [200, 500]
     
