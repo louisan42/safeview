@@ -1,6 +1,7 @@
 # Health probe only — this workflow does not deploy.
-# Production deploys from Railway GitHub Source on merge to main (Wait for CI).
-# Do not add railway up / Railway API tokens here except as a documented emergency.
+# Production deploys from the CI "Deploy Railway" job on push to main.
+# Staging deploys from the same job on push to staging.
+# Do not log RAILWAY_TOKEN, PG_DSN, or DATABASE_URL.
 name: Production health check
 
 on:

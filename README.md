@@ -6,10 +6,15 @@
 
 Watchtile (full name: Neighbourhood Watchtile) is a civic crime and safety map for Toronto. The product name is **Watchtile**; this repository and GitHub project remain **SafetyView** (`louisan42/safeview`).
 
-Production (Railway):
+Production (Railway, from `main`):
 - Web: https://web-production-69f87.up.railway.app
 - API: https://api-production-2c307.up.railway.app
 - Health: https://api-production-2c307.up.railway.app/health
+
+Staging (Railway, from `staging`):
+- Web: https://web-staging-81f9.up.railway.app
+- API: https://api-staging-5b49.up.railway.app
+- Health: https://api-staging-5b49.up.railway.app/health
 
 ## Overview
 
@@ -71,38 +76,50 @@ The weekly GitHub Action uses `PG_DSN` (Railway public TCP) with secret masking.
 
 ## How a change ships
 
-`main` is protected: changes go through a pull request. Direct pushes to `main` are blocked for everyone except a repository admin who explicitly bypasses protection.
+The GitHub default branch stays **`main`** (production). Feature PRs must still target **`staging`**. GitHub has no separate “default merge branch” API, so this is enforced with branch rulesets plus a required check on `main`.
 
-1. Open a PR against `main`.
-2. **CI** runs (API unit tests, PostGIS integration tests, web production build). The PR cannot merge while CI is red.
-3. Railway creates an isolated **PR environment** from the `staging` base (own API, web, and PostGIS — not production data). The map is public; there is no sign-in gate.
-4. Railway comments the preview URLs on the PR. Long-lived staging is `https://web-staging-81f9.up.railway.app` / `https://api-staging-5b49.up.railway.app`. PR hosts look like `https://<service>-pr-<number>-<hash>.up.railway.app` (exact hosts are in the Railway comment).
-5. Merge the PR. Railway deletes the PR environment.
-6. A push to `main` deploys **production** only after CI is green (**Wait for CI**). A failed CI run skips the production deploy.
-7. `Production health check` then curls the live API `/health` and the web origin. It does not deploy.
+```
+feature branch
+    → PR into staging          (CI: API unit, API integration, web build)
+    → merge to staging
+    → Railway staging          (https://web-staging-81f9.up.railway.app)
+    → PR staging → main        (only allowed promotion into production)
+    → merge to main
+    → Railway production       (https://web-production-69f87.up.railway.app)
+```
 
-There is no Coolify path. Do not use `railway up` as the happy path — that is CLI-only emergency recovery if GitHub autodeploy is broken.
+1. Open a feature PR against **`staging`** (`gh pr create --base staging`). Direct PRs into `main` fail the **Require staging → main** check.
+2. **CI** runs (API unit tests, PostGIS integration tests, web production build). The PR cannot merge while those checks are red.
+3. Merge into `staging`. Railway **staging** deploys from the `staging` branch (long-lived `web-staging-81f9` / `api-staging-5b49`). The map is public; there is no sign-in gate.
+4. Open a promotion PR **`staging` → `main`**. That is the only head branch `main` accepts.
+5. Merge to `main`. Railway **production** deploys from `main` after CI is green.
+6. `Production health check` then curls the live production API `/health` and the web origin. It does not deploy.
+
+There is no Coolify path. Do not use `railway up` from a laptop as the happy path.
 
 ### Branch protection
 
-Required status checks on `main`: **API unit tests**, **API integration tests**, **Web build**. Conversation resolution is required. Repository admins can still bypass GitHub rules; everyone else must use a PR.
+- **`main`**: pull request required, conversation resolution required, no admin bypass, no direct pushes, no force-push. Required checks: **API unit tests**, **API integration tests**, **Web build**, **Require staging → main**.
+- **`staging`**: pull request required, conversation resolution required, no admin bypass, no direct pushes, no force-push. Required checks: **API unit tests**, **API integration tests**, **Web build**.
 
 ### Railway environments
 
 | Environment | Git trigger | Database |
 | --- | --- | --- |
 | production | `main` after CI | production PostGIS |
-| staging | PR-environment base (not a second production) | isolated PostGIS (copy from production via **Refresh staging DB**) |
-| PR / preview | each open PR | clone of staging PostGIS |
+| staging | `staging` branch (not PR Environments, not `cicd/github-railway`) | isolated PostGIS (copy from production via **Refresh staging DB**) |
 
 Project: https://railway.com/project/fb2ac2a8-5df1-4355-8979-7d484cb1db8e
 
-GitHub Actions does not need a Railway API token. Railway's GitHub integration deploys from `louisan42/safeview`.
+Deploy path: GitHub Actions job **Deploy Railway** (in **CI**) runs `railway up` after tests on push to `staging` or `main`. Secret name only: `RAILWAY_TOKEN` on GitHub Environments **staging** and **production**. The workflow masks it with `::add-mask::`. Never log `RAILWAY_TOKEN`, `PG_DSN`, or `DATABASE_URL`.
 
-One-time Railway dashboard clicks (not available via CLI/API):
+If the Railway GitHub App is connected, native Source autodeploy can watch the same branches (**Wait for CI**). Use **either** the Action **or** native autodeploy, not both, or each push deploys twice.
 
-1. **Wait for CI** — each of **api** and **web** in **production** → Settings → Source / Deploy → enable **Wait for CI**. Failed GitHub **CI** then `SKIPPED` the production deploy.
-2. **PR environments** — Project Settings → Environments → **Enable PR Environments** → base environment **staging** (not production). Leave Bot PR Environments off.
+One-time clicks (not available via API):
+
+1. GitHub → Settings → Environments → **production** and **staging** → secret **`RAILWAY_TOKEN`** (Railway project token for that environment).
+2. Optional native Source: [install Railway GitHub App](https://github.com/apps/railway-app/installations/new) on `louisan42/safeview`, then each of **api** and **web** → Settings → Source → branch `main` (production) or `staging` (staging) → enable **Wait for CI**. If you do this, disable the **Deploy Railway** CI job so deploys are not doubled.
+3. Do **not** enable Railway PR Environments for this promotion flow. Staging is the long-lived `staging` branch.
 
 ### Copy production PostGIS → staging
 
@@ -144,4 +161,4 @@ GitHub Actions runs unit tests, PostGIS integration tests, and a web production 
 - Product name: Watchtile (Neighbourhood Watchtile). Repo / package names: SafetyView, `louisan42/safeview`.
 - API port is **8888** everywhere (local, Docker, Railway). Do not use 8000.
 - Never commit secrets. `etl/config.yaml` is gitignored. Do not log `PG_DSN`.
-- `deploy.sh` is local Docker only; production is Railway from `main` via GitHub.
+- `deploy.sh` is local Docker only. Staging deploys from `staging`; production deploys from `main`.
