@@ -13,7 +13,8 @@
 ## Learned Workspace Facts
 - Product display name is Watchtile (full lockup: Neighbourhood Watchtile; former UI name Lotline); the workspace folder and GitHub repo remain SafetyView / louisan42/safeview.
 - Stack is FastAPI (`api/`), React + Leaflet (`web/`), PostGIS, and ETL from Toronto Police Service open data (robbery, theft over, break and enter).
-- Railway hosts API, web, and production Postgres+PostGIS. Feature PRs target `staging` (Railway staging); production deploys from `main` only via a `staging` → `main` PR. Coolify and laptop `railway up` are not the happy path.
+- Railway hosts API, web, and Postgres+PostGIS (production and staging). Feature PRs target `staging`; Railway staging watches that branch and production watches `main`. Production deploys only via a `staging` → `main` PR. Do not use Railway PR Environments. GitHub Actions Deploy Railway uses Environment secret `RAILWAY_TOKEN`. Coolify and laptop `railway up` are not the happy path.
+- Production web is https://watchtile.koramaple.ca (Railway custom domain; the old `web-production-69f87.up.railway.app` hostname was deleted). Production API remains https://api-production-2c307.up.railway.app (`CORS_ORIGINS` must include the koramaple origin). Staging web stays https://web-staging-81f9.up.railway.app.
 - Weekly ETL runs on GitHub Actions against Railway Postgres.
 - Local defaults: API on port 8888, Vite often on 5173 (3000 is frequently occupied), Docker PostGIS `sv_db_dev` on 55432.
 - Brand assets live in `web/public/` (`logo.svg`, `favicon.svg`, `logo-lockup.svg`): house-roof tessellation; UI accent is blue `#2563EB`.

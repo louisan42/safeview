@@ -137,7 +137,7 @@ jobs:
       - name: Health check
         env:
           API_URL: ${{ github.ref == 'refs/heads/main' && 'https://api-production-2c307.up.railway.app' || 'https://api-staging-5b49.up.railway.app' }}
-          WEB_URL: ${{ github.ref == 'refs/heads/main' && 'https://web-production-69f87.up.railway.app' || 'https://web-staging-81f9.up.railway.app' }}
+          WEB_URL: ${{ github.ref == 'refs/heads/main' && 'https://watchtile.koramaple.ca' || 'https://web-staging-81f9.up.railway.app' }}
         run: |
           set -euo pipefail
           echo "Waiting for ${API_URL}/health"
