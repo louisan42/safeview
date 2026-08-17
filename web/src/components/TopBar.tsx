@@ -49,11 +49,11 @@ export const TopBar: React.FC<TopBarProps> = ({
     <header className="pointer-events-none absolute inset-x-0 top-0 z-[1000] p-3 md:p-4">
       <div className="pointer-events-auto mx-auto flex max-w-[1400px] flex-col gap-2">
         <div className="sv-panel relative z-20 flex flex-wrap items-center gap-2 rounded-md px-4 py-2.5">
-          <div className="flex min-w-[9rem] items-center gap-2.5 pr-3">
-            <img src="/logo.svg" alt="" width={32} height={32} className="h-8 w-8 shrink-0 rounded-lg" aria-hidden="true" />
+          <div className="flex min-w-[10.5rem] items-center gap-2.5 pr-3">
+            <img src="/logo.svg?v=2" alt="" width={32} height={32} className="h-8 w-8 shrink-0 rounded-lg" aria-hidden="true" />
             <div className="flex flex-col">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sv-accent">Toronto</div>
-              <div className="font-display text-lg font-bold leading-tight tracking-tight text-sv-ink">Lotline</div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sv-accent">Neighbourhood</div>
+              <div className="font-display text-lg font-bold leading-tight tracking-tight text-sv-ink">Watchtile</div>
             </div>
           </div>
           <AddressSearch onLocate={onLocate} />

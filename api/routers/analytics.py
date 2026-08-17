@@ -1,4 +1,5 @@
 from datetime import datetime
+from collections import defaultdict
 from typing import List, Optional, Literal, Dict, Any
 
 from fastapi import APIRouter, Query, HTTPException
@@ -24,6 +25,7 @@ class Totals(BaseModel):
 class AnalyticsResponse(BaseModel):
     totals: Totals
     timeline: List[SeriesPoint]
+    timeline_by_category: Dict[str, List[SeriesPoint]]
 
 
 class CompareWindow(BaseModel):
@@ -77,6 +79,45 @@ def _build_filters(
     return where, params
 
 
+def _bucket_key(value: Any) -> str:
+    if hasattr(value, "date") and callable(value.date):
+        try:
+            return value.date().isoformat()
+        except Exception:
+            pass
+    return str(value)[:10]
+
+
+def _align_category_timeline(
+    timeline: List[SeriesPoint],
+    by_category: Dict[str, int],
+    cat_ts_rows: List[Any],
+) -> Dict[str, List[SeriesPoint]]:
+    counts: Dict[str, Dict[str, int]] = defaultdict(dict)
+    for row in cat_ts_rows or []:
+        bucket = row.get("bucket") if isinstance(row, dict) else None
+        mci = row.get("mci") if isinstance(row, dict) else None
+        if bucket is None or not mci:
+            continue
+        counts[str(mci)][_bucket_key(bucket)] = int(row["c"])
+
+    aligned: Dict[str, List[SeriesPoint]] = {}
+    for cat in by_category.keys():
+        cat_map = counts.get(cat)
+        if cat_map is None:
+            cat_lower = cat.lower()
+            for key, value in counts.items():
+                if key.lower() == cat_lower:
+                    cat_map = value
+                    break
+        cat_map = cat_map or {}
+        aligned[cat] = [
+            SeriesPoint(date=point.date, count=cat_map.get(_bucket_key(point.date), 0))
+            for point in timeline
+        ]
+    return aligned
+
+
 async def _run_analytics(
     date_from: datetime,
     date_to: datetime,
@@ -124,7 +165,27 @@ async def _run_analytics(
         ts_rows = await cur.fetchall()
         timeline = [SeriesPoint(date=r["bucket"], count=int(r["c"])) for r in ts_rows]
 
-    return AnalyticsResponse(totals=Totals(total=total, by_dataset=by_dataset, by_category=by_category), timeline=timeline)
+        await cur.execute(
+            f"""
+            SELECT date_trunc(%s, report_date) AS bucket,
+                   COALESCE(mci_category, 'other') AS mci,
+                   COUNT(*) AS c
+            FROM tps_incidents
+            {where_total}
+            GROUP BY bucket, mci
+            ORDER BY bucket, mci
+            """,
+            [interval] + params_total,
+        )
+        cat_ts_rows = await cur.fetchall()
+
+    timeline_by_category = _align_category_timeline(timeline, by_category, cat_ts_rows)
+
+    return AnalyticsResponse(
+        totals=Totals(total=total, by_dataset=by_dataset, by_category=by_category),
+        timeline=timeline,
+        timeline_by_category=timeline_by_category,
+    )
 
 
 # ---- Routes ----

@@ -62,13 +62,19 @@ export type StatsResponse = {
   by_mci_category: Array<{ key: string | null; count: number }>
 }
 
+export type TimelinePoint = {
+  date: string
+  count: number
+}
+
 export type AnalyticsResponse = {
   totals: {
     total: number
     by_dataset: Record<string, number>
     by_category: Record<string, number>
   }
-  timeline: Array<{ date: string; count: number }>
+  timeline: TimelinePoint[]
+  timeline_by_category?: Record<string, TimelinePoint[]>
 }
 
 export type CompareResponse = {
@@ -95,9 +101,23 @@ export type Delta = {
   pct: number | null
 }
 
+export type OverlayMode = 'window' | 'hood'
+
 export type HoodCompare = {
-  a: { code: string; name: string; total: number; timeline: Array<{ label: string; count: number }> }
-  b: { code: string; name: string; total: number; timeline: Array<{ label: string; count: number }> }
+  a: {
+    code: string
+    name: string
+    total: number
+    timeline: TimelinePoint[]
+    timeline_by_category: Record<string, TimelinePoint[]>
+  }
+  b: {
+    code: string
+    name: string
+    total: number
+    timeline: TimelinePoint[]
+    timeline_by_category: Record<string, TimelinePoint[]>
+  }
   diff: number
   pct: number | null
 }
