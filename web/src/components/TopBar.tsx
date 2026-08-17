@@ -24,7 +24,6 @@ type TopBarProps = {
   onCategory: (value: string | null) => void
   onLocate: (hit: GeocodeHit, neighbourhood: NeighbourhoodMatch | null) => void
   showing: { n: number; m: number; loading: boolean }
-  authSlot?: React.ReactNode
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -45,7 +44,6 @@ export const TopBar: React.FC<TopBarProps> = ({
   onCategory,
   onLocate,
   showing,
-  authSlot,
 }) => {
   return (
     <header className="pointer-events-none absolute inset-x-0 top-0 z-[1000] p-3 md:p-4">
@@ -91,14 +89,13 @@ export const TopBar: React.FC<TopBarProps> = ({
               />
             </div>
           ) : null}
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-1">
             <Chip active={scope === 'map'} onClick={() => onScope('map')}>
               Map
             </Chip>
             <Chip active={scope === 'city'} onClick={() => onScope('city')}>
               City
             </Chip>
-            {authSlot}
           </div>
         </div>
         <div className="sv-panel relative z-10 flex flex-wrap items-center gap-2 rounded-md px-4 py-2.5">

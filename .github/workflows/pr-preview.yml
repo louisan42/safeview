@@ -23,7 +23,7 @@ jobs:
               'Railway opens an isolated **PR environment** (not production) when this PR is opened.',
               '',
               '- Base environment: `staging` (own PostGIS — PRs cannot wipe production data)',
-              '- Sign-in uses the **Clerk development** instance (`VITE_CLERK_PUBLISHABLE_KEY` / `pk_test_`)',
+              '- The map is public (no sign-in). Refresh staging data with **Refresh staging DB**',
               '- Production still deploys only after merge to `main` and a green **CI** run (Wait for CI)',
               '- Railway comments the preview URLs on this PR when the environment is ready',
               '',

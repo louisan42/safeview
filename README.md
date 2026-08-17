@@ -75,7 +75,7 @@ The weekly GitHub Action uses `PG_DSN` (Railway public TCP) with secret masking.
 
 1. Open a PR against `main`.
 2. **CI** runs (API unit tests, PostGIS integration tests, web production build). The PR cannot merge while CI is red.
-3. Railway creates an isolated **PR environment** from the `staging` base (own API, web, and PostGIS — not production data). Sign-in uses the Clerk **development** instance.
+3. Railway creates an isolated **PR environment** from the `staging` base (own API, web, and PostGIS — not production data). The map is public; there is no sign-in gate.
 4. Railway comments the preview URLs on the PR. Long-lived staging is `https://web-staging-81f9.up.railway.app` / `https://api-staging-5b49.up.railway.app`. PR hosts look like `https://<service>-pr-<number>-<hash>.up.railway.app` (exact hosts are in the Railway comment).
 5. Merge the PR. Railway deletes the PR environment.
 6. A push to `main` deploys **production** only after CI is green (**Wait for CI**). A failed CI run skips the production deploy.
@@ -89,11 +89,11 @@ Required status checks on `main`: **API unit tests**, **API integration tests**,
 
 ### Railway environments
 
-| Environment | Git trigger | Database | Clerk |
-| --- | --- | --- | --- |
-| production | `main` after CI | production PostGIS | leave `VITE_CLERK_PUBLISHABLE_KEY` unset to keep the map public, or set `pk_live_` when you turn on production auth |
-| staging | PR-environment base (not a second production) | isolated PostGIS | Clerk **development** `pk_test_` |
-| PR / preview | each open PR | clone of staging PostGIS (empty, isolated) | inherits staging development keys |
+| Environment | Git trigger | Database |
+| --- | --- | --- |
+| production | `main` after CI | production PostGIS |
+| staging | PR-environment base (not a second production) | isolated PostGIS (copy from production via **Refresh staging DB**) |
+| PR / preview | each open PR | clone of staging PostGIS |
 
 Project: https://railway.com/project/fb2ac2a8-5df1-4355-8979-7d484cb1db8e
 
@@ -104,19 +104,20 @@ One-time Railway dashboard clicks (not available via CLI/API):
 1. **Wait for CI** — each of **api** and **web** in **production** → Settings → Source / Deploy → enable **Wait for CI**. Failed GitHub **CI** then `SKIPPED` the production deploy.
 2. **PR environments** — Project Settings → Environments → **Enable PR Environments** → base environment **staging** (not production). Leave Bot PR Environments off.
 
-### Clerk
+### Copy production PostGIS → staging
 
-Vite React uses `@clerk/react` and `VITE_CLERK_PUBLISHABLE_KEY` (baked in at Docker build time). Secret keys stay out of git.
+Watchtile has no auth. Staging is for realistic map data, not sign-in. The **Refresh staging DB** workflow (`workflow_dispatch`, reusable via `workflow_call`) dumps production tables with `pg_dump` (custom format) and restores them onto staging PostGIS.
 
-- Staging / PR: Clerk application **Watchtile Staging**, development instance.
-- Production: Clerk production keys on the Railway production web service only when you want auth on the public map.
-- Local: copy `env.example` to `.env` and optionally set a `pk_test_` key. With no key, the map stays public.
+It copies `tps_incidents`, `cot_neighbourhoods_158`, `etl_metadata`, and the analytics views. Weekly **ETL** still writes only to production (`PG_DSN` repo secret). Do not point ETL at staging.
 
-The Clerk application **Watchtile Staging** (`app_3I1FJydfYsfQB48So0znHL5sLwj`) already exists. Dashboard leftovers:
+GitHub Environment **staging** secrets (names only — never paste these into issues or logs):
 
-1. [Clerk Dashboard](https://dashboard.clerk.com) → **Watchtile Staging** → **Configure** → **Domains**.
-2. Add `https://web-staging-81f9.up.railway.app` and each PR web origin Railway comments (or `https://*.up.railway.app` if the UI allows a wildcard).
-3. Development instance → [API keys](https://dashboard.clerk.com/~/api-keys): publishable key is already set on the Railway **staging** web service as `VITE_CLERK_PUBLISHABLE_KEY`. Do not paste secret keys into git.
+- `PROD_PG_DSN` (or `SOURCE_PG_DSN`) — production **public** TCP URL (`sslmode=require`)
+- `STAGING_PG_DSN` — staging **public** TCP URL (`sslmode=require`)
+
+The staging API `DATABASE_URL` must stay `${{Postgres.DATABASE_URL}}` for the **staging** Postgres plugin. After the workflow exists, run it from Actions → **Refresh staging DB** → Run workflow (this branch or `main` after merge).
+
+The job masks both DSNs (and password/host) with `::add-mask::` before dump/restore, writes the dump to a temp file, deletes it, and uses `set +x`. CI fails if a workflow `echo`s a Postgres URL.
 
 ### Services
 

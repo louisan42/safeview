@@ -1,15 +1,19 @@
+import os
+
+import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-import os
-
+from api.config import settings
+from api.routers.analytics import router as analytics_router
+from api.routers.geocode import router as geocode_router
 from api.routers.health import router as health_router
 from api.routers.incidents import router as incidents_router
 from api.routers.neighbourhoods import router as neighbourhoods_router
 from api.routers.stats import router as stats_router
-from api.routers.analytics import router as analytics_router
-from api.routers.geocode import router as geocode_router
-from api.config import settings
+from api.sanitize import install_log_redaction
+
+install_log_redaction()
 
 app = FastAPI(
     title="SafetyView API",
@@ -48,6 +52,5 @@ app.include_router(geocode_router, prefix="/v1")
 
 # For `python -m api.main`
 if __name__ == "__main__":
-    import uvicorn
     port = int(os.environ.get("PORT", "8888"))
     uvicorn.run("api.main:app", host="0.0.0.0", port=port, reload=True)

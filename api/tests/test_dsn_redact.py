@@ -1,3 +1,11 @@
+import logging
+
+from api.sanitize import (
+    RedactSecretsFilter,
+    dsn_safe_summary as api_dsn_safe_summary,
+    redact_secrets as api_redact_secrets,
+    redacted_exception as api_redacted_exception,
+)
 from etl.sanitize import dsn_safe_summary, redact_secrets, redacted_exception
 
 
@@ -25,3 +33,21 @@ def test_redacted_exception_masks_url():
     text = redacted_exception(exc)
     assert "hunter2" not in text
     assert "bob:***@" in text
+
+
+def test_api_sanitize_matches_etl():
+    raw = "failed postgresql://alice:s3cret@db.example.com:5432/app?sslmode=require boom"
+    assert api_redact_secrets(raw) == redact_secrets(raw)
+    assert api_dsn_safe_summary(raw) == dsn_safe_summary(raw)
+    exc = RuntimeError(raw)
+    assert api_redacted_exception(exc) == redacted_exception(exc)
+
+
+def test_log_filter_redacts_dsn(caplog):
+    logger = logging.getLogger("sv_redact_test")
+    logger.setLevel(logging.ERROR)
+    logger.addFilter(RedactSecretsFilter())
+    with caplog.at_level(logging.ERROR, logger="sv_redact_test"):
+        logger.error("fail postgresql://bob:hunter2@localhost/db")
+    assert "hunter2" not in caplog.text
+    assert "bob:***@" in caplog.text

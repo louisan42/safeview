@@ -1,12 +1,10 @@
 import React from 'react'
 import L from 'leaflet'
-import { AuthBar } from './components/AuthBar'
 import { TopBar } from './components/TopBar'
 import { DetailsSheet } from './components/DetailsSheet'
 import { MapCanvas } from './components/MapCanvas'
 import { EmptyState } from './components/EmptyState'
 import { ChoroplethLegend } from './components/ChoroplethLegend'
-import { clerkEnabled } from './lib/clerk'
 import { choroplethUrl, compareUrl, incidentsUrl, neighbourhoodsUrl, statsUrl, analyticsUrl } from './lib/api'
 import { fetchJson, humanizeError, isAbortError } from './lib/http'
 import { clampDate, endOfDayZ, lastNDaysOfData, nextDayStartZ, startOfDayZ, windowOverlapsData } from './lib/dates'
@@ -463,7 +461,6 @@ export function App() {
         onCategory={setSelectedCategory}
         onLocate={onLocate}
         showing={{ n: features.length, m: total, loading }}
-        authSlot={clerkEnabled ? <AuthBar /> : null}
       />
       <div className="pointer-events-none absolute bottom-20 left-3 z-[1000] md:bottom-6 md:left-14">
         <ChoroplethLegend max={maxCount} />

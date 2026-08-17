@@ -1,0 +1,54 @@
+# Copy production PostGIS → staging PostGIS. Does not run ETL.
+# ETL keeps using repo secret PG_DSN (production only).
+name: Refresh staging DB
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  group: refresh-staging-db
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  copy:
+    name: Dump production → restore staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    env:
+      PYTHONPATH: .
+      PROD_PG_DSN: ${{ secrets.PROD_PG_DSN }}
+      SOURCE_PG_DSN: ${{ secrets.SOURCE_PG_DSN }}
+      STAGING_PG_DSN: ${{ secrets.STAGING_PG_DSN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fail if workflows echo a Postgres URL
+        run: python3 scripts/check_secret_hygiene.py
+
+      - name: Mask database secrets
+        run: |
+          set +x
+          python3 scripts/mask_pg_dsn.py --require STAGING_PG_DSN --require-any PROD_PG_DSN,SOURCE_PG_DSN
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install PostgreSQL client
+        run: |
+          set +x
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Dump production and restore staging
+        run: |
+          set +x
+          set -euo pipefail
+          python3 scripts/refresh_staging_db.py

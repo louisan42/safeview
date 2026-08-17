@@ -20,4 +20,4 @@
 - The map uses the real 158 Toronto neighbourhood polygons.
 - `etl/config.yaml` can contain live database credentials — never commit it, and never print or log DSNs (the GitHub repo is public).
 - Railway MCP is available for this project.
-- Staging/PR web auth uses Clerk development (`@clerk/react`, `VITE_CLERK_PUBLISHABLE_KEY`). Production stays public until a `pk_live_` key is set on the production web service.
+- The map is public (no Clerk/auth). Staging PostGIS is filled from production by the **Refresh staging DB** GitHub Action (`PROD_PG_DSN` / `STAGING_PG_DSN` environment secrets). Weekly ETL stays on production `PG_DSN` only.
