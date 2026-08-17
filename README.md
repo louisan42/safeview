@@ -113,7 +113,7 @@ It copies `tps_incidents`, `cot_neighbourhoods_158`, `etl_metadata`, and the ana
 GitHub Environment **staging** secrets (names only — never paste these into issues or logs):
 
 - `PROD_PG_DSN` (or `SOURCE_PG_DSN`) — production **public** TCP URL (`sslmode=require`)
-- `STAGING_PG_DSN` — staging **public** TCP URL (`sslmode=require`)
+- `STAGING_PG_DSN` — staging **public** TCP URL (`sslmode=prefer` if the proxy does not support SSL)
 
 The staging API `DATABASE_URL` must stay `${{Postgres.DATABASE_URL}}` for the **staging** Postgres plugin. After the workflow exists, run it from Actions → **Refresh staging DB** → Run workflow (this branch or `main` after merge).
 

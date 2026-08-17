@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -28,6 +29,18 @@ SELECT
   (SELECT COUNT(*) FROM etl_metadata) AS metadata;
 """
 
+_CONNINFO_RE = re.compile(
+    r'connection to server at "[^"]+"(?:\s+\([^)]+\))?, port \d+',
+    re.IGNORECASE,
+)
+
+
+def _redact_cmd_output(text: str) -> str:
+    return _CONNINFO_RE.sub(
+        'connection to server at "[redacted]", port [redacted]',
+        redact_secrets(text),
+    )
+
 
 def _source_dsn() -> str:
     return (os.environ.get("PROD_PG_DSN") or os.environ.get("SOURCE_PG_DSN") or "").strip()
@@ -37,14 +50,30 @@ def _dest_dsn() -> str:
     return (os.environ.get("STAGING_PG_DSN") or "").strip()
 
 
-def ensure_sslmode(dsn: str) -> str:
+def ensure_sslmode(dsn: str, default: str = "require") -> str:
     parsed = urlparse(dsn)
     if not parsed.scheme or not parsed.hostname:
         return dsn
     query = parse_qs(parsed.query)
     if query.get("sslmode"):
         return dsn
-    query["sslmode"] = ["require"]
+    query["sslmode"] = [default]
+    return urlunparse(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            parsed.params,
+            urlencode(query, doseq=True),
+            parsed.fragment,
+        )
+    )
+
+
+def with_sslmode(dsn: str, mode: str) -> str:
+    parsed = urlparse(dsn)
+    query = parse_qs(parsed.query)
+    query["sslmode"] = [mode]
     return urlunparse(
         (
             parsed.scheme,
@@ -76,7 +105,7 @@ def _run(cmd: list[str], *, label: str) -> None:
     if completed.returncode != 0:
         combined = f"{completed.stdout or ''}\n{completed.stderr or ''}"
         print(f"[staging-db] {label} failed", file=sys.stderr)
-        print(redact_secrets(combined), file=sys.stderr)
+        print(_redact_cmd_output(combined), file=sys.stderr)
         raise SystemExit(completed.returncode or 1)
 
 
@@ -95,14 +124,34 @@ def _psql_scalar(dsn: str, sql: str) -> str:
     )
     if completed.returncode != 0:
         print("[staging-db] count query failed", file=sys.stderr)
-        print(redact_secrets(completed.stderr or ""), file=sys.stderr)
+        print(_redact_cmd_output(completed.stderr or ""), file=sys.stderr)
         raise SystemExit(completed.returncode or 1)
     return (completed.stdout or "").strip()
 
 
+def _probe_dsn(dsn: str) -> bool:
+    completed = subprocess.run(
+        ["psql", "--dbname", dsn, "-v", "ON_ERROR_STOP=1", "-tAc", "SELECT 1"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return completed.returncode == 0 and (completed.stdout or "").strip() == "1"
+
+
+def _dest_with_working_ssl(dest: str) -> str:
+    for mode in ("require", "prefer", "disable"):
+        candidate = with_sslmode(dest, mode)
+        if _probe_dsn(candidate):
+            print(f"[staging-db] dest sslmode={mode}")
+            return candidate
+    print("[staging-db] could not connect to staging Postgres", file=sys.stderr)
+    raise SystemExit(1)
+
+
 def main() -> int:
-    source = ensure_sslmode(_source_dsn())
-    dest = ensure_sslmode(_dest_dsn())
+    source = ensure_sslmode(_source_dsn(), default="require")
+    dest = ensure_sslmode(_dest_dsn(), default="prefer")
     if not source or not dest:
         print(
             "[staging-db] Missing DSN. Set PROD_PG_DSN (or SOURCE_PG_DSN) and STAGING_PG_DSN.",
@@ -114,6 +163,7 @@ def main() -> int:
         return 1
 
     print(f"[staging-db] source {dsn_safe_summary(source)}")
+    dest = _dest_with_working_ssl(dest)
     print(f"[staging-db] dest {dsn_safe_summary(dest)}")
     for tool in ("pg_dump", "pg_restore", "psql"):
         _print_version(tool)

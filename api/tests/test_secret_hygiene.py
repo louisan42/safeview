@@ -67,3 +67,16 @@ def test_refresh_adds_sslmode():
     out = refresh.ensure_sslmode(dsn)
     assert "sslmode=require" in out
     assert refresh.ensure_sslmode(out) == out
+    prefer = refresh.ensure_sslmode(dsn, default="prefer")
+    assert "sslmode=prefer" in prefer
+    forced = refresh.with_sslmode(dsn, "disable")
+    assert "sslmode=disable" in forced
+
+
+def test_refresh_redacts_psql_conninfo():
+    refresh = _load("refresh_staging_db")
+    raw = 'psql: error: connection to server at "example.invalid" (1.2.3.4), port 1234 failed'
+    out = refresh._redact_cmd_output(raw)
+    assert "example.invalid" not in out
+    assert "1.2.3.4" not in out
+    assert "[redacted]" in out
