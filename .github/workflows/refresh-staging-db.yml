@@ -41,11 +41,14 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Install PostgreSQL client
+      - name: Install PostgreSQL 18 client
         run: |
           set +x
           sudo apt-get update
-          sudo apt-get install -y postgresql-client
+          sudo apt-get install -y postgresql-common ca-certificates
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-18
+          pg_dump --version
 
       - name: Dump production and restore staging
         run: |

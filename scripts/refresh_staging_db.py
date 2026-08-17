@@ -80,6 +80,12 @@ def _run(cmd: list[str], *, label: str) -> None:
         raise SystemExit(completed.returncode or 1)
 
 
+def _print_version(tool: str) -> None:
+    completed = subprocess.run([tool, "--version"], check=False, capture_output=True, text=True)
+    text = (completed.stdout or completed.stderr or "").strip()
+    print(f"[staging-db] {text or tool + ' version unknown'}")
+
+
 def _psql_scalar(dsn: str, sql: str) -> str:
     completed = subprocess.run(
         ["psql", "--dbname", dsn, "-v", "ON_ERROR_STOP=1", "-tAc", sql],
@@ -109,6 +115,8 @@ def main() -> int:
 
     print(f"[staging-db] source {dsn_safe_summary(source)}")
     print(f"[staging-db] dest {dsn_safe_summary(dest)}")
+    for tool in ("pg_dump", "pg_restore", "psql"):
+        _print_version(tool)
 
     dump_fd, dump_name = tempfile.mkstemp(prefix="sv-pg-", suffix=".dump")
     os.close(dump_fd)
