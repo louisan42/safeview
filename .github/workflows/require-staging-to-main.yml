@@ -1,0 +1,28 @@
+# Required check on PRs into main. Feature work must land on staging first.
+name: Require staging → main
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  require-staging:
+    name: Require staging → main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail unless the PR head is staging on this repo
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ "$HEAD_REPO" != "$BASE_REPO" ]; then
+            echo "::error::PRs into main must come from ${BASE_REPO}:staging (same repository). Forks cannot promote to production."
+            exit 1
+          fi
+          if [ "$HEAD_REF" != "staging" ]; then
+            echo "::error::PRs into main must use head branch staging (got ${HEAD_REF}). Open a feature PR targeting staging, then promote with a staging → main PR."
+            exit 1
+          fi
+          echo "OK: ${HEAD_REPO}@${HEAD_REF} → main"

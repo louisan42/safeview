@@ -1,0 +1,38 @@
+# Comment the long-lived Railway staging URLs on feature PRs that target staging.
+name: PR preview note
+
+on:
+  pull_request:
+    types: [opened]
+    branches: [staging]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  comment:
+    name: Comment staging preview notes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const body = [
+              '## Staging promotion',
+              '',
+              'This PR targets **staging**. After merge, Railway **staging** deploys from the `staging` branch (not a PR environment, not production).',
+              '',
+              '- Web: https://web-staging-81f9.up.railway.app',
+              '- API: https://api-staging-5b49.up.railway.app',
+              '- Health: https://api-staging-5b49.up.railway.app/health',
+              '- The map is public (no sign-in). Refresh staging data with **Refresh staging DB**',
+              '- Production is a later **staging → main** PR only',
+              '',
+              'Project: https://railway.com/project/fb2ac2a8-5df1-4355-8979-7d484cb1db8e',
+            ].join('\n')
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            })

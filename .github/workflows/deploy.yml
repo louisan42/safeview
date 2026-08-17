@@ -1,6 +1,7 @@
-# Railway deploys API + web from GitHub on push to main
-# (project SafetyView, GitHub integration). This workflow does not hold
-# Railway tokens; it waits for CI and then checks production health.
+# Health probe only — this workflow does not deploy.
+# Production deploys from the CI "Deploy Railway" job on push to main.
+# Staging deploys from the same job on push to staging.
+# Do not log RAILWAY_TOKEN, PG_DSN, or DATABASE_URL.
 name: Production health check
 
 on:

@@ -1,4 +1,4 @@
-import type { DatasetKey, TimePreset } from './types'
+import type { DatasetKey, Interval, OverlayMode, TimePreset } from './types'
 
 export function datasetLabel(key: string | null | undefined): string {
   const k = (key || '').toLowerCase()
@@ -71,6 +71,66 @@ export function timePresetDays(preset: TimePreset): number | null {
       return null
     default: {
       const _never: never = preset
+      return _never
+    }
+  }
+}
+
+export function intervalLabel(interval: Interval): string {
+  switch (interval) {
+    case 'day':
+      return 'Day'
+    case 'week':
+      return 'Week'
+    case 'month':
+      return 'Month'
+    default: {
+      const _never: never = interval
+      return _never
+    }
+  }
+}
+
+export function intervalAxisLabel(interval: Interval): string {
+  switch (interval) {
+    case 'day':
+      return 'Report date'
+    case 'week':
+      return 'Week starting'
+    case 'month':
+      return 'Month'
+    default: {
+      const _never: never = interval
+      return _never
+    }
+  }
+}
+
+export function overlayTitle(mode: OverlayMode): string {
+  switch (mode) {
+    case 'window':
+      return 'Current window vs previous window'
+    case 'hood':
+      return 'Neighbourhoods, same dates'
+    default: {
+      const _never: never = mode
+      return _never
+    }
+  }
+}
+
+export function formatBucketTick(iso: string, interval: Interval): string {
+  const day = iso.slice(0, 10)
+  const parsed = new Date(`${day}T00:00:00Z`)
+  if (Number.isNaN(parsed.getTime())) return day
+  switch (interval) {
+    case 'day':
+    case 'week':
+      return parsed.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
+    case 'month':
+      return parsed.toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' })
+    default: {
+      const _never: never = interval
       return _never
     }
   }

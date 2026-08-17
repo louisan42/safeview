@@ -114,3 +114,47 @@ class TestAnalytics:
                 assert response.status_code == 200
                 data = response.json()
                 assert "timeline" in data
+                assert "timeline_by_category" in data
+
+    def test_analytics_category_timeline_aligned(self, client):
+        """Category buckets share the total timeline dates and fill missing counts with 0."""
+
+        def mock_cursor_cm():
+            cursor = AsyncMock()
+
+            def execute_handler(sql, params=None):
+                if "COUNT(*) AS c" in sql and "GROUP BY" not in sql:
+                    cursor.fetchone.return_value = {"c": 25}
+                elif "GROUP BY dataset" in sql:
+                    cursor.fetchall.return_value = [{"dataset": "robbery", "c": 15}]
+                elif "GROUP BY cat" in sql or "AS cat" in sql:
+                    cursor.fetchall.return_value = [
+                        {"cat": "Robbery", "c": 15},
+                        {"cat": "Theft Over", "c": 10},
+                    ]
+                elif "GROUP BY bucket, mci" in sql:
+                    cursor.fetchall.return_value = [
+                        {"bucket": "2024-01-01T00:00:00", "mci": "Robbery", "c": 6},
+                        {"bucket": "2024-01-02T00:00:00", "mci": "Robbery", "c": 9},
+                        {"bucket": "2024-01-01T00:00:00", "mci": "Theft Over", "c": 10},
+                    ]
+                else:
+                    cursor.fetchall.return_value = [
+                        {"bucket": "2024-01-01T00:00:00", "c": 16},
+                        {"bucket": "2024-01-02T00:00:00", "c": 9},
+                    ]
+                    cursor.fetchone.return_value = {"c": 0}
+
+            cursor.execute.side_effect = execute_handler
+            cursor.__aenter__ = AsyncMock(return_value=cursor)
+            cursor.__aexit__ = AsyncMock(return_value=None)
+            return cursor
+
+        with patch('api.routers.analytics.cursor', mock_cursor_cm):
+            response = client.get("/v1/analytics?interval=day&date_from=2024-01-01&date_to=2024-01-03")
+            assert response.status_code == 200
+            data = response.json()
+            by_cat = data["timeline_by_category"]
+            assert set(by_cat.keys()) == {"Robbery", "Theft Over"}
+            assert [p["count"] for p in by_cat["Robbery"]] == [6, 9]
+            assert [p["count"] for p in by_cat["Theft Over"]] == [10, 0]

@@ -1,11 +1,19 @@
 import React from 'react'
 import { SearchableSelect } from './SearchableSelect'
-import { MiniBars } from './MiniBars'
-import { Sparkline } from './Sparkline'
 import { Chip } from './Chip'
-import { ACCENT } from '../lib/colors'
-import type { AnalyticsResponse, Delta, HoodCompare, Interval, NeighbourhoodFeature } from '../lib/types'
-import { categoryLabel } from '../lib/labels'
+import { TrendChart } from './TrendChart'
+import { categorySeriesColor, CHART_CURRENT, CHART_PRIOR } from '../lib/colors'
+import { alignSeries, niceMax, overlayCaption, orderedCategoryKeys, seriesForCategory } from '../lib/chart'
+import { categoryLabel, formatBucketTick, intervalAxisLabel, intervalLabel, overlayTitle } from '../lib/labels'
+import type {
+  AnalyticsResponse,
+  CompareResponse,
+  Delta,
+  HoodCompare,
+  Interval,
+  NeighbourhoodFeature,
+  OverlayMode,
+} from '../lib/types'
 
 type DetailsSheetProps = {
   open: boolean
@@ -13,6 +21,7 @@ type DetailsSheetProps = {
   title: string
   subtitle?: string
   analytics: AnalyticsResponse | null
+  windowCompare: CompareResponse | null
   delta: Delta | null
   interval: Interval
   onInterval: (v: Interval) => void
@@ -33,12 +42,26 @@ function deltaClass(diff: number): string {
   return 'text-sv-ink bg-sv-paper-2'
 }
 
+function ChartLegend({ items }: { items: Array<{ name: string; color: string }> }) {
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      {items.map((item) => (
+        <span key={item.name} className="inline-flex items-center gap-1.5 text-xs text-sv-muted">
+          <span className="h-0.5 w-3.5 rounded-full" style={{ background: item.color }} aria-hidden />
+          {item.name}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 export const DetailsSheet: React.FC<DetailsSheetProps> = ({
   open,
   onClose,
   title,
   subtitle,
   analytics,
+  windowCompare,
   delta,
   interval,
   onInterval,
@@ -52,18 +75,100 @@ export const DetailsSheet: React.FC<DetailsSheetProps> = ({
   error,
   onRetry,
 }) => {
+  const [breakdown, setBreakdown] = React.useState(false)
   const options = neighbourhoods.map((f) => ({
     value: f.properties.area_long_code,
     label: f.properties.area_name,
   }))
+
+  const overlayMode: OverlayMode = hoodCompare ? 'hood' : 'window'
+  const xLabel = intervalAxisLabel(interval)
+
+  const overlay = React.useMemo(() => {
+    if (hoodCompare) {
+      let aligned = alignSeries(hoodCompare.a.timeline, hoodCompare.b.timeline)
+      if (aligned.labels.length === 0) {
+        const fallback = windowCompare?.window_a.timeline || analytics?.timeline || []
+        aligned = {
+          labels: fallback.map((point) => point.date),
+          current: fallback.map(() => 0),
+          prior: fallback.map(() => 0),
+        }
+      }
+      return {
+        title: `${hoodCompare.a.name} vs ${hoodCompare.b.name}`,
+        labels: aligned.labels.map((d) => formatBucketTick(d, interval)),
+        series: [
+          { name: hoodCompare.a.name, values: aligned.current, color: CHART_CURRENT },
+          { name: hoodCompare.b.name, values: aligned.prior, color: CHART_PRIOR },
+        ],
+      }
+    }
+    const current = windowCompare?.window_a.timeline || analytics?.timeline || []
+    const prior = windowCompare?.window_b.timeline || []
+    const aligned = alignSeries(current, prior)
+    return {
+      title: overlayTitle(overlayMode),
+      labels: aligned.labels.map((d) => formatBucketTick(d, interval)),
+      series: [
+        { name: 'Current window', values: aligned.current, color: CHART_CURRENT },
+        { name: 'Previous window', values: aligned.prior, color: CHART_PRIOR },
+      ],
+    }
+  }, [analytics, hoodCompare, interval, overlayMode, windowCompare])
+
+  const categoryPanels = React.useMemo(() => {
+    if (hoodCompare) {
+      const keys = orderedCategoryKeys([hoodCompare.a.timeline_by_category, hoodCompare.b.timeline_by_category])
+      return keys.map((key) => {
+        const aligned = alignSeries(
+          seriesForCategory(hoodCompare.a.timeline_by_category, key),
+          seriesForCategory(hoodCompare.b.timeline_by_category, key),
+        )
+        return {
+          key,
+          title: categoryLabel(key),
+          labels: aligned.labels.map((d) => formatBucketTick(d, interval)),
+          series: [
+            { name: hoodCompare.a.name, values: aligned.current, color: CHART_CURRENT },
+            { name: hoodCompare.b.name, values: aligned.prior, color: CHART_PRIOR },
+          ],
+        }
+      })
+    }
+    const currentByCat = windowCompare?.window_a.timeline_by_category || analytics?.timeline_by_category || {}
+    const priorByCat = windowCompare?.window_b.timeline_by_category || {}
+    const keys = orderedCategoryKeys([currentByCat, priorByCat])
+    return keys.map((key) => {
+      const current = seriesForCategory(currentByCat, key)
+      const prior = seriesForCategory(priorByCat, key)
+      const aligned = alignSeries(current, prior)
+      const series =
+        prior.length > 0
+          ? [
+              { name: 'Current window', values: aligned.current, color: CHART_CURRENT },
+              { name: 'Previous window', values: aligned.prior, color: CHART_PRIOR },
+            ]
+          : [{ name: categoryLabel(key), values: aligned.current, color: categorySeriesColor(key) }]
+      return {
+        key,
+        title: categoryLabel(key),
+        labels: aligned.labels.map((d) => formatBucketTick(d, interval)),
+        series,
+      }
+    })
+  }, [analytics, hoodCompare, interval, windowCompare])
+
+  const sharedYMax = Math.max(0, ...categoryPanels.flatMap((panel) => panel.series.flatMap((s) => s.values)))
+  const canBreakdown = categoryPanels.length > 0
 
   return (
     <aside
       className={[
         'fixed z-[1100] flex flex-col bg-sv-paper text-sv-ink shadow-paper',
         'border-sv-ink/10',
-        'max-md:inset-x-0 max-md:bottom-0 max-md:max-h-[52vh] max-md:rounded-t-xl max-md:border-t',
-        'md:inset-y-0 md:right-0 md:w-[380px] md:border-l',
+        'max-md:inset-x-0 max-md:bottom-0 max-md:max-h-[64vh] max-md:rounded-t-xl max-md:border-t',
+        'md:inset-y-0 md:right-0 md:w-[460px] md:border-l',
         'transition-[transform,opacity] duration-200 ease-out',
         open ? 'translate-y-0 opacity-100 md:translate-x-0' : 'pointer-events-none opacity-0 max-md:translate-y-full md:translate-x-full',
       ].join(' ')}
@@ -114,26 +219,64 @@ export const DetailsSheet: React.FC<DetailsSheetProps> = ({
               ) : null}
             </div>
             <p className="mt-1 text-xs text-sv-muted">More incidents than the previous window is flagged as a warning.</p>
-            <div className="mt-3 flex items-center gap-2">
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               {(['day', 'week', 'month'] as const).map((iv) => (
-                <Chip key={iv} active={interval === iv} onClick={() => onInterval(iv)} className="capitalize">
-                  {iv}
+                <Chip key={iv} active={interval === iv} onClick={() => onInterval(iv)}>
+                  {intervalLabel(iv)}
                 </Chip>
               ))}
+              <Chip
+                active={breakdown}
+                disabled={!canBreakdown}
+                title={canBreakdown ? 'Show one chart per MCI category' : 'Category timeline unavailable'}
+                onClick={() => setBreakdown((v) => !v)}
+              >
+                By category
+              </Chip>
             </div>
-            {analytics.timeline.length > 0 ? (
-              <div className="mt-3 rounded-md border border-sv-ink/10 bg-white/60 px-3 py-2">
-                {interval === 'day' ? (
-                  <Sparkline data={analytics.timeline.map((p) => p.count)} stroke={ACCENT} width={280} height={36} />
-                ) : (
-                  <MiniBars
-                    data={analytics.timeline.map((p) => ({ label: String(p.date).slice(0, 10), count: p.count }))}
-                    barColor={ACCENT}
-                    height={36}
-                  />
-                )}
+
+            <div className="mt-4 rounded-md border border-sv-ink/10 bg-white/70 p-3">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="text-sm font-semibold text-sv-ink">{overlay.title}</div>
+                <ChartLegend items={overlay.series.map((s) => ({ name: s.name, color: s.color }))} />
+              </div>
+              <div className="mt-2 min-h-[200px]">
+                <TrendChart
+                  categories={overlay.labels}
+                  series={overlay.series}
+                  height={220}
+                  ariaLabel={overlay.title}
+                />
+              </div>
+              <p className="mt-1 text-[11px] leading-snug text-sv-muted">{overlayCaption(overlayMode, interval, xLabel)}</p>
+            </div>
+
+            {breakdown && canBreakdown ? (
+              <div className="mt-3 space-y-3">
+                <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-sv-muted">By category</div>
+                {categoryPanels.map((panel) => (
+                  <div key={panel.key} className="rounded-md border border-sv-ink/10 bg-white/70 p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="text-sm font-semibold text-sv-ink">{panel.title}</div>
+                      <ChartLegend items={panel.series.map((s) => ({ name: s.name, color: s.color }))} />
+                    </div>
+                    <TrendChart
+                      categories={panel.labels}
+                      series={panel.series}
+                      height={140}
+                      yMax={sharedYMax}
+                      compact
+                      ariaLabel={`${panel.title} reported incidents`}
+                    />
+                  </div>
+                ))}
+                <p className="text-[11px] leading-snug text-sv-muted">
+                  Shared scale 0 to {niceMax(Math.max(sharedYMax, 1))} so mix stays honest. Robbery is not stretched to match
+                  break and enter.
+                </p>
               </div>
             ) : null}
+
             <div className="mt-3 flex flex-wrap gap-1.5">
               {Object.entries(analytics.totals.by_category)
                 .sort((a, b) => b[1] - a[1])
@@ -148,7 +291,9 @@ export const DetailsSheet: React.FC<DetailsSheetProps> = ({
 
         <section>
           <div className="text-[11px] font-medium uppercase tracking-[0.14em] text-sv-muted">Compare neighbourhoods</div>
-          <p className="mt-1 text-xs text-sv-muted">Each chart uses that neighbourhood’s own timeline, with the same filters as the map.</p>
+          <p className="mt-1 text-xs text-sv-muted">
+            One overlay, two neighbourhoods, same dates. The large chart switches to this pair after you compare.
+          </p>
           <div className="mt-2 space-y-2">
             <SearchableSelect options={options} value={hoodA} onChange={onHoodA} placeholder="Neighbourhood A" />
             <SearchableSelect options={options} value={hoodB} onChange={onHoodB} placeholder="Neighbourhood B" />
@@ -163,19 +308,15 @@ export const DetailsSheet: React.FC<DetailsSheetProps> = ({
           </button>
           {hoodCompare ? (
             <div className="mt-3 space-y-2">
-              <div className="rounded-md border border-sv-ink/10 bg-white/70 p-3">
-                <div className="flex items-baseline justify-between">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-md border border-sv-ink/10 bg-white/70 p-3">
                   <div className="text-xs text-sv-muted">{hoodCompare.a.name}</div>
                   <div className="font-mono text-lg font-medium tabular-nums">{hoodCompare.a.total}</div>
                 </div>
-                <MiniBars className="mt-2" data={hoodCompare.a.timeline} barColor={ACCENT} />
-              </div>
-              <div className="rounded-md border border-sv-ink/10 bg-white/70 p-3">
-                <div className="flex items-baseline justify-between">
+                <div className="rounded-md border border-sv-ink/10 bg-white/70 p-3">
                   <div className="text-xs text-sv-muted">{hoodCompare.b.name}</div>
                   <div className="font-mono text-lg font-medium tabular-nums">{hoodCompare.b.total}</div>
                 </div>
-                <MiniBars className="mt-2" data={hoodCompare.b.timeline} barColor={ACCENT} />
               </div>
               <div className={`rounded-md px-3 py-2 text-center text-sm font-medium ${deltaClass(hoodCompare.diff)}`}>
                 {hoodCompare.diff > 0 ? '+' : ''}

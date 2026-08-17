@@ -57,10 +57,12 @@ export function App() {
   const [mapReady, setMapReady] = React.useState(false)
   const [analytics, setAnalytics] = React.useState<AnalyticsResponse | null>(null)
   const [detailAnalytics, setDetailAnalytics] = React.useState<AnalyticsResponse | null>(null)
+  const [windowCompare, setWindowCompare] = React.useState<CompareResponse | null>(null)
   const [delta, setDelta] = React.useState<Delta | null>(null)
   const [interval, setInterval] = React.useState<Interval>('day')
   const [hoodA, setHoodA] = React.useState('')
   const [hoodB, setHoodB] = React.useState('')
+  const [hoodCompareOn, setHoodCompareOn] = React.useState(false)
   const [hoodCompare, setHoodCompare] = React.useState<HoodCompare | null>(null)
   const [flyTo, setFlyTo] = React.useState<{ lat: number; lng: number; zoom?: number } | null>(null)
 
@@ -241,10 +243,11 @@ export function App() {
     params.set('a_date_to', end.toISOString())
     params.set('b_date_from', prevStart.toISOString())
     params.set('b_date_to', prevEnd.toISOString())
-    params.set('interval', 'day')
+    params.set('interval', interval)
     if (dataset) params.set('dataset', dataset)
     if (selectedCategory) params.set('mci_category', selectedCategory)
-    if (!citywide) params.set('bbox', quantizedBbox(map))
+    if (selectedHood) params.set('hood', selectedHood.properties.area_long_code)
+    else if (!citywide) params.set('bbox', quantizedBbox(map))
     if (abortCompare.current) abortCompare.current.abort()
     const controller = new AbortController()
     abortCompare.current = controller
@@ -254,12 +257,13 @@ export function App() {
         const bTotal = Number(data.window_b?.totals?.total || 0)
         const diff = aTotal - bTotal
         const pct = bTotal ? (diff / bTotal) * 100 : null
+        setWindowCompare(data)
         setDelta({ diff, pct })
       })
       .catch((err) => {
         if (isAbortError(err)) return
       })
-  }, [citywide, dataset, dateFrom, dateTo, rangeReady, selectedCategory])
+  }, [citywide, dataset, dateFrom, dateTo, interval, rangeReady, selectedCategory, selectedHood])
 
   const refreshAll = React.useCallback(() => {
     fetchIncidents()
@@ -293,12 +297,11 @@ export function App() {
   React.useEffect(() => {
     if (!rangeReady || !mapReady) return
     refreshAll()
-  }, [rangeReady, mapReady, dataset, selectedCategory, dateFrom, dateTo, scope, interval, refreshAll])
+  }, [rangeReady, mapReady, dataset, selectedCategory, dateFrom, dateTo, scope, interval, selectedHood, refreshAll])
 
   React.useEffect(() => {
     if (!selectedHood || !rangeReady || !dateFrom || !dateTo) {
       setDetailAnalytics(null)
-      if (rangeReady && dateFrom && dateTo && mapRef.current) fetchCompare()
       return
     }
     const params = sharedParams(true)
@@ -309,32 +312,55 @@ export function App() {
       .catch((err) => {
         if (isAbortError(err)) return
       })
-    const start = new Date(startOfDayZ(dateFrom))
-    const end = new Date(nextDayStartZ(dateTo))
-    const ms = end.getTime() - start.getTime()
-    const prevEnd = new Date(start.getTime())
-    const prevStart = new Date(start.getTime() - ms)
-    const c = new URLSearchParams()
-    c.set('a_date_from', start.toISOString())
-    c.set('a_date_to', end.toISOString())
-    c.set('b_date_from', prevStart.toISOString())
-    c.set('b_date_to', prevEnd.toISOString())
-    c.set('interval', 'day')
-    c.set('hood', selectedHood.properties.area_long_code)
-    if (dataset) c.set('dataset', dataset)
-    if (selectedCategory) c.set('mci_category', selectedCategory)
-    fetchJson<CompareResponse>(compareUrl(c))
-      .then((data) => {
-        const aTotal = Number(data.window_a?.totals?.total || 0)
-        const bTotal = Number(data.window_b?.totals?.total || 0)
-        const diff = aTotal - bTotal
-        const pct = bTotal ? (diff / bTotal) * 100 : null
-        setDelta({ diff, pct })
+  }, [dataset, dateFrom, dateTo, interval, rangeReady, selectedCategory, selectedHood, sharedParams])
+
+  React.useEffect(() => {
+    if (!hoodCompareOn || !hoodA || !hoodB || !rangeReady || !dateFrom || !dateTo) {
+      if (!hoodCompareOn) setHoodCompare(null)
+      return
+    }
+    let cancelled = false
+    const params = sharedParams(true)
+    params.set('interval', interval)
+    const fetchOne = async (code: string) => {
+      const p = new URLSearchParams(params)
+      p.set('hood', code)
+      return fetchJson<AnalyticsResponse>(analyticsUrl(p))
+    }
+    Promise.all([fetchOne(hoodA), fetchOne(hoodB)])
+      .then(([aRes, bRes]) => {
+        if (cancelled) return
+        const nameOf = (code: string) => hoodNames.get(code) || code
+        const diff = aRes.totals.total - bRes.totals.total
+        const pct = bRes.totals.total ? (diff / bRes.totals.total) * 100 : null
+        setHoodCompare({
+          a: {
+            code: hoodA,
+            name: nameOf(hoodA),
+            total: aRes.totals.total,
+            timeline: aRes.timeline || [],
+            timeline_by_category: aRes.timeline_by_category || {},
+          },
+          b: {
+            code: hoodB,
+            name: nameOf(hoodB),
+            total: bRes.totals.total,
+            timeline: bRes.timeline || [],
+            timeline_by_category: bRes.timeline_by_category || {},
+          },
+          diff,
+          pct,
+        })
+        setSheetOpen(true)
       })
       .catch((err) => {
-        if (isAbortError(err)) return
+        if (cancelled || isAbortError(err)) return
+        setError(humanizeError(err))
       })
-  }, [dataset, dateFrom, dateTo, interval, rangeReady, selectedCategory, selectedHood, sharedParams])
+    return () => {
+      cancelled = true
+    }
+  }, [dateFrom, dateTo, hoodA, hoodB, hoodCompareOn, hoodNames, interval, rangeReady, sharedParams])
 
   const onPreset = (p: TimePreset) => {
     setPreset(p)
@@ -383,32 +409,10 @@ export function App() {
     setSheetOpen(true)
   }
 
-  const compareHoods = async () => {
+  const compareHoods = () => {
     if (!hoodA || !hoodB) return
-    const params = sharedParams(true)
-    params.set('interval', interval)
-    const fetchOne = async (code: string) => {
-      const p = new URLSearchParams(params)
-      p.set('hood', code)
-      return fetchJson<AnalyticsResponse>(analyticsUrl(p))
-    }
-    try {
-      const [aRes, bRes] = await Promise.all([fetchOne(hoodA), fetchOne(hoodB)])
-      const nameOf = (code: string) => hoodNames.get(code) || code
-      const toTl = (res: AnalyticsResponse) =>
-        (res.timeline || []).map((p) => ({ label: String(p.date).slice(0, 10), count: p.count }))
-      const diff = aRes.totals.total - bRes.totals.total
-      const pct = bRes.totals.total ? (diff / bRes.totals.total) * 100 : null
-      setHoodCompare({
-        a: { code: hoodA, name: nameOf(hoodA), total: aRes.totals.total, timeline: toTl(aRes) },
-        b: { code: hoodB, name: nameOf(hoodB), total: bRes.totals.total, timeline: toTl(bRes) },
-        diff,
-        pct,
-      })
-      setSheetOpen(true)
-    } catch (err) {
-      if (!isAbortError(err)) setError(humanizeError(err))
-    }
+    setHoodCompareOn(true)
+    setSheetOpen(true)
   }
 
   const categoryChips = Object.entries(analytics?.totals.by_category || {})
@@ -488,6 +492,7 @@ export function App() {
         title={sheetTitle}
         subtitle={sheetSub}
         analytics={detailAnalytics || analytics}
+        windowCompare={windowCompare}
         delta={delta}
         interval={interval}
         onInterval={setInterval}
