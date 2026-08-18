@@ -19,7 +19,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     env:
       API_URL: https://api-production-2c307.up.railway.app
-      WEB_URL: https://web-production-69f87.up.railway.app
+      WEB_URL: https://watchtile.koramaple.ca
     steps:
       - name: Wait for API /health
         run: |

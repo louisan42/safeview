@@ -7,7 +7,7 @@
 Watchtile (full name: Neighbourhood Watchtile) is a civic crime and safety map for Toronto. The product name is **Watchtile**; this repository and GitHub project remain **SafetyView** (`louisan42/safeview`).
 
 Production (Railway, from `main`):
-- Web: https://web-production-69f87.up.railway.app
+- Web: https://watchtile.koramaple.ca
 - API: https://api-production-2c307.up.railway.app
 - Health: https://api-production-2c307.up.railway.app/health
 
@@ -85,7 +85,7 @@ feature branch
     → Railway staging          (https://web-staging-81f9.up.railway.app)
     → PR staging → main        (only allowed promotion into production)
     → merge to main
-    → Railway production       (https://web-production-69f87.up.railway.app)
+    → Railway production       (https://watchtile.koramaple.ca)
 ```
 
 1. Open a feature PR against **`staging`** (`gh pr create --base staging`). Direct PRs into `main` fail the **Require staging → main** check.
@@ -144,7 +144,7 @@ The job masks both DSNs (and password/host) with `::add-mask::` before dump/rest
 | web | `Dockerfile.web` | `railway.web.toml` | **80** (nginx; `/api` proxied to the API) |
 | Postgres | Railway plugin | PostGIS enabled | private + public TCP |
 
-Web build uses `VITE_API_BASE_URL=/api`. At runtime set `API_UPSTREAM` on the web service to `${{api.RAILWAY_PRIVATE_DOMAIN}}:${{api.PORT}}`. Set `CORS_ORIGINS` on the API to include the production and staging web origins. Never log `PG_DSN` or `DATABASE_URL`. Staging DB URL must not be the production DSN.
+Web build uses `VITE_API_BASE_URL=/api`. At runtime set `API_UPSTREAM` on the web service to `${{api.RAILWAY_PRIVATE_DOMAIN}}:${{api.PORT}}`. Set `CORS_ORIGINS` on the production API to include `https://watchtile.koramaple.ca` (and local Vite `http://localhost:5173`). Staging API CORS should include `https://web-staging-81f9.up.railway.app`. Never log `PG_DSN` or `DATABASE_URL`. Staging DB URL must not be the production DSN.
 
 ## Testing
 
