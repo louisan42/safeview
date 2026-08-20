@@ -39,7 +39,6 @@ type DetailsSheetProps = {
   appTitle?: string
   updatedLine: string | null
   tpsLine: string | null
-  lagNote: string | null
 }
 
 function deltaClass(diff: number): string {
@@ -84,7 +83,6 @@ export const DetailsSheet: React.FC<DetailsSheetProps> = ({
   appTitle,
   updatedLine,
   tpsLine,
-  lagNote,
 }) => {
   const [breakdown, setBreakdown] = React.useState(false)
   const options = neighbourhoods.map((f) => ({
@@ -196,7 +194,6 @@ export const DetailsSheet: React.FC<DetailsSheetProps> = ({
               appTitle={appTitle}
               updatedLine={updatedLine}
               tpsLine={tpsLine}
-              lagNote={lagNote}
             />
           </div>
         </div>

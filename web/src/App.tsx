@@ -5,8 +5,9 @@ import { DetailsSheet } from './components/DetailsSheet'
 import { MapCanvas } from './components/MapCanvas'
 import { EmptyState } from './components/EmptyState'
 import { ChoroplethLegend } from './components/ChoroplethLegend'
+import { MapStamp } from './components/MapStamp'
 import { choroplethUrl, compareUrl, incidentsUrl, metaUrl, neighbourhoodsUrl, statsUrl, analyticsUrl } from './lib/api'
-import { deployHoverTitle, displaySha, formatTpsThroughLine, formatUpdatedLine, publishedLagNote } from './lib/buildStamp'
+import { deployHoverTitle, displaySha, formatAppVersionLine, formatTpsThroughLine, formatUpdatedLine, publishedLagNote } from './lib/buildStamp'
 import { fetchJson, humanizeError, isAbortError } from './lib/http'
 import { clampDate, endOfDayZ, lastNDaysOfData, nextDayStartZ, startOfDayZ, windowOverlapsData } from './lib/dates'
 import { categoryLabel, timePresetDays } from './lib/labels'
@@ -446,6 +447,7 @@ export function App() {
       : 'Current map extent'
   const gitSha = displaySha(apiMeta?.git_sha, import.meta.env.VITE_GIT_SHA)
   const appTitle = deployHoverTitle(apiMeta?.deployment_id, apiMeta?.version)
+  const versionLine = formatAppVersionLine(gitSha)
   const updatedLine = formatUpdatedLine(lastEtlRunAt)
   const tpsLine = formatTpsThroughLine(statsMaxDate)
   const lagNote = publishedLagNote(statsMaxDate)
@@ -480,12 +482,9 @@ export function App() {
         onCategory={setSelectedCategory}
         onLocate={onLocate}
         showing={{ n: features.length, m: total, loading }}
-        gitSha={gitSha}
-        appTitle={appTitle}
-        updatedLine={updatedLine}
-        tpsLine={tpsLine}
         lagNote={lagNote}
       />
+      <MapStamp versionLine={versionLine} tpsLine={tpsLine} title={appTitle} />
       <div className="pointer-events-none absolute bottom-20 left-3 z-[1000] flex flex-col items-start gap-2 md:bottom-6 md:left-14">
         <ChoroplethLegend max={maxCount} />
       </div>
@@ -529,7 +528,6 @@ export function App() {
         appTitle={appTitle}
         updatedLine={updatedLine}
         tpsLine={tpsLine}
-        lagNote={lagNote}
       />
     </div>
   )
