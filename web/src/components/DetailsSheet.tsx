@@ -1,6 +1,7 @@
 import React from 'react'
 import { SearchableSelect } from './SearchableSelect'
 import { Chip } from './Chip'
+import { DataStatus } from './DataStatus'
 import { TrendChart } from './TrendChart'
 import { categorySeriesColor, CHART_CURRENT, CHART_PRIOR } from '../lib/colors'
 import { alignSeries, niceMax, overlayCaption, orderedCategoryKeys, seriesForCategory } from '../lib/chart'
@@ -34,8 +35,11 @@ type DetailsSheetProps = {
   hoodCompare: HoodCompare | null
   error: string | null
   onRetry: () => void
-  buildLine?: string
-  buildTitle?: string
+  gitSha: string
+  appTitle?: string
+  updatedLine: string | null
+  tpsLine: string | null
+  lagNote: string | null
 }
 
 function deltaClass(diff: number): string {
@@ -76,8 +80,11 @@ export const DetailsSheet: React.FC<DetailsSheetProps> = ({
   hoodCompare,
   error,
   onRetry,
-  buildLine,
-  buildTitle,
+  gitSha,
+  appTitle,
+  updatedLine,
+  tpsLine,
+  lagNote,
 }) => {
   const [breakdown, setBreakdown] = React.useState(false)
   const options = neighbourhoods.map((f) => ({
@@ -183,6 +190,15 @@ export const DetailsSheet: React.FC<DetailsSheetProps> = ({
           <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sv-accent">Details</div>
           <h2 className="font-display truncate text-xl font-bold tracking-tight text-sv-ink">{title}</h2>
           {subtitle ? <p className="mt-0.5 text-sm text-sv-muted">{subtitle}</p> : null}
+          <div className="mt-2">
+            <DataStatus
+              sha={gitSha}
+              appTitle={appTitle}
+              updatedLine={updatedLine}
+              tpsLine={tpsLine}
+              lagNote={lagNote}
+            />
+          </div>
         </div>
         <button
           type="button"
@@ -331,11 +347,6 @@ export const DetailsSheet: React.FC<DetailsSheetProps> = ({
           ) : null}
         </section>
       </div>
-      {buildLine ? (
-        <div className="border-t border-sv-ink/10 px-5 py-3 text-[11px] leading-snug text-sv-muted" title={buildTitle || buildLine}>
-          {buildLine}
-        </div>
-      ) : null}
     </aside>
   )
 }
