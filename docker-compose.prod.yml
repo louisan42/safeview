@@ -21,6 +21,7 @@ services:
       dockerfile: Dockerfile.web
       args:
         VITE_API_BASE_URL: /api
+        VITE_GIT_SHA: ${VITE_GIT_SHA:-dev}
     ports:
       - "8080:80"
     depends_on:

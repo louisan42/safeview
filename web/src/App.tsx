@@ -5,7 +5,9 @@ import { DetailsSheet } from './components/DetailsSheet'
 import { MapCanvas } from './components/MapCanvas'
 import { EmptyState } from './components/EmptyState'
 import { ChoroplethLegend } from './components/ChoroplethLegend'
-import { choroplethUrl, compareUrl, incidentsUrl, neighbourhoodsUrl, statsUrl, analyticsUrl } from './lib/api'
+import { BuildStamp } from './components/BuildStamp'
+import { choroplethUrl, compareUrl, incidentsUrl, metaUrl, neighbourhoodsUrl, statsUrl, analyticsUrl } from './lib/api'
+import { formatBuildLine } from './lib/buildStamp'
 import { fetchJson, humanizeError, isAbortError } from './lib/http'
 import { clampDate, endOfDayZ, lastNDaysOfData, nextDayStartZ, startOfDayZ, windowOverlapsData } from './lib/dates'
 import { categoryLabel, timePresetDays } from './lib/labels'
@@ -20,6 +22,7 @@ import type {
   IncidentCollection,
   IncidentFeature,
   Interval,
+  MetaResponse,
   NeighbourhoodCollection,
   NeighbourhoodFeature,
   NeighbourhoodMatch,
@@ -52,6 +55,8 @@ export function App() {
   const [rangeReady, setRangeReady] = React.useState(false)
   const [statsMaxDate, setStatsMaxDate] = React.useState<string | null>(null)
   const [statsMinDate, setStatsMinDate] = React.useState<string | null>(null)
+  const [lastEtlRunAt, setLastEtlRunAt] = React.useState<string | null>(null)
+  const [apiMeta, setApiMeta] = React.useState<MetaResponse | null>(null)
   const [selectedCategory, setSelectedCategory] = React.useState<string | null>(null)
   const [selectedHood, setSelectedHood] = React.useState<NeighbourhoodFeature | null>(null)
   const [sheetOpen, setSheetOpen] = React.useState(false)
@@ -97,12 +102,17 @@ export function App() {
     let cancelled = false
     ;(async () => {
       try {
-        const data = await fetchJson<StatsResponse>(statsUrl())
+        const [data, meta] = await Promise.all([
+          fetchJson<StatsResponse>(statsUrl()),
+          fetchJson<MetaResponse>(metaUrl()).catch(() => null),
+        ])
         if (cancelled) return
         const max = data.max_report_date ? data.max_report_date.slice(0, 10) : null
         const min = data.min_report_date ? data.min_report_date.slice(0, 10) : null
         setStatsMaxDate(max)
         setStatsMinDate(min)
+        setLastEtlRunAt(data.last_etl_run_at)
+        if (meta) setApiMeta(meta)
         const ds = (usp?.get('dataset') || '') as '' | DatasetKey
         const df = usp?.get('dateFrom') || ''
         const dt = usp?.get('dateTo') || ''
@@ -435,6 +445,18 @@ export function App() {
     : citywide
       ? 'City-wide'
       : 'Current map extent'
+  const buildLine = formatBuildLine({
+    apiSha: apiMeta?.git_sha,
+    viteSha: import.meta.env.VITE_GIT_SHA,
+    lastEtlRunAt,
+    maxReportDate: statsMaxDate,
+  })
+  const buildTitle = [
+    apiMeta?.version ? `v${apiMeta.version}` : null,
+    apiMeta?.deployment_id ? `deploy ${apiMeta.deployment_id}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 
   return (
     <div className="relative h-full bg-sv-paper">
@@ -467,8 +489,9 @@ export function App() {
         onLocate={onLocate}
         showing={{ n: features.length, m: total, loading }}
       />
-      <div className="pointer-events-none absolute bottom-20 left-3 z-[1000] md:bottom-6 md:left-14">
+      <div className="pointer-events-none absolute bottom-20 left-3 z-[1000] flex flex-col items-start gap-2 md:bottom-6 md:left-14">
         <ChoroplethLegend max={maxCount} />
+        <BuildStamp line={buildLine} title={buildTitle || undefined} />
       </div>
       {showEmpty ? (
         <div className="pointer-events-none absolute inset-0 z-[900] flex items-center justify-center p-4">
@@ -506,6 +529,8 @@ export function App() {
         hoodCompare={hoodCompare}
         error={error}
         onRetry={refreshAll}
+        buildLine={buildLine}
+        buildTitle={buildTitle || undefined}
       />
     </div>
   )

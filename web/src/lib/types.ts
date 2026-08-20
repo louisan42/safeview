@@ -62,6 +62,14 @@ export type StatsResponse = {
   by_mci_category: Array<{ key: string | null; count: number }>
 }
 
+export type MetaResponse = {
+  name: string
+  version: string
+  git_sha: string
+  deployment_id: string | null
+  city_agnostic?: boolean
+}
+
 export type TimelinePoint = {
   date: string
   count: number

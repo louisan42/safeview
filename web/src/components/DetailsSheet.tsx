@@ -34,6 +34,8 @@ type DetailsSheetProps = {
   hoodCompare: HoodCompare | null
   error: string | null
   onRetry: () => void
+  buildLine?: string
+  buildTitle?: string
 }
 
 function deltaClass(diff: number): string {
@@ -74,6 +76,8 @@ export const DetailsSheet: React.FC<DetailsSheetProps> = ({
   hoodCompare,
   error,
   onRetry,
+  buildLine,
+  buildTitle,
 }) => {
   const [breakdown, setBreakdown] = React.useState(false)
   const options = neighbourhoods.map((f) => ({
@@ -327,6 +331,11 @@ export const DetailsSheet: React.FC<DetailsSheetProps> = ({
           ) : null}
         </section>
       </div>
+      {buildLine ? (
+        <div className="border-t border-sv-ink/10 px-5 py-3 text-[11px] leading-snug text-sv-muted" title={buildTitle || buildLine}>
+          {buildLine}
+        </div>
+      ) : null}
     </aside>
   )
 }

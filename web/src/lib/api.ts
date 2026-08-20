@@ -3,6 +3,7 @@ import type {
   CompareResponse,
   GeocodeHit,
   IncidentCollection,
+  MetaResponse,
   NeighbourhoodCollection,
   NeighbourhoodMatch,
   StatsResponse,
@@ -34,6 +35,10 @@ export function statsUrl(): string {
   return `${API_BASE}/v1/stats`
 }
 
+export function metaUrl(): string {
+  return `${API_BASE}/meta`
+}
+
 export function geocodeUrl(q: string): string {
   return `${API_BASE}/v1/geocode?q=${encodeURIComponent(q)}`
 }
@@ -42,4 +47,13 @@ export function neighbourhoodAtUrl(lng: number, lat: number): string {
   return `${API_BASE}/v1/neighbourhoods/at?lng=${encodeURIComponent(String(lng))}&lat=${encodeURIComponent(String(lat))}`
 }
 
-export type { AnalyticsResponse, CompareResponse, GeocodeHit, IncidentCollection, NeighbourhoodCollection, NeighbourhoodMatch, StatsResponse }
+export type {
+  AnalyticsResponse,
+  CompareResponse,
+  GeocodeHit,
+  IncidentCollection,
+  MetaResponse,
+  NeighbourhoodCollection,
+  NeighbourhoodMatch,
+  StatsResponse,
+}
