@@ -28,7 +28,8 @@ import type {
   TimePreset,
 } from './lib/types'
 
-const INCIDENT_LIMIT = 500
+/** Match GET /v1/incidents max (`le=5000`). Bbox-scoped fetches stay well under a full-city dump; clustering keeps the DOM small. */
+const INCIDENT_LIMIT = 5000
 
 function quantizedBbox(map: L.Map): string {
   const b = map.getBounds()
