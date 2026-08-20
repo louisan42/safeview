@@ -53,3 +53,9 @@ class TestIncidentsEndpointLimitValidation:
         client = TestClient(app)
         response = client.get("/v1/incidents?limit=999999")
         assert response.status_code == 422
+
+    def test_incidents_endpoint_rejects_limit_just_over_max(self):
+        """5000 is the documented max; 5001 must 422 before hitting the database."""
+        client = TestClient(app)
+        response = client.get("/v1/incidents?limit=5001")
+        assert response.status_code == 422
