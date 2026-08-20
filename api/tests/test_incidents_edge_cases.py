@@ -167,3 +167,37 @@ class TestIncidentsEndpointWithLimitParameter:
             data = response.json()
             assert data["type"] == "FeatureCollection"
         assert len(data["features"]) <= 1000
+
+    def test_incidents_endpoint_accepts_documented_max_limit(self):
+        """Map clients request the documented max (5000); it must not 422."""
+        mock_row = {
+            "id": 1,
+            "dataset": "robbery",
+            "event_unique_id": "E1",
+            "report_date": "2024-01-01T00:00:00Z",
+            "occ_date": "2024-01-01T00:00:00Z",
+            "offence": "Robbery",
+            "mci_category": "Robbery",
+            "hood_158": "001",
+            "lon": -79.4,
+            "lat": 43.7,
+            "geojson": {"type": "Point", "coordinates": [-79.4, 43.7]},
+        }
+
+        def mock_cursor_cm():
+            cursor = AsyncMock()
+            cursor.fetchall.return_value = [mock_row]
+            cursor.fetchone.return_value = {"count": 1}
+            cursor.__aenter__ = AsyncMock(return_value=cursor)
+            cursor.__aexit__ = AsyncMock(return_value=None)
+            return cursor
+
+        try:
+            import routers.incidents as incidents_module
+        except Exception:  # pragma: no cover
+            import api.routers.incidents as incidents_module
+        with patch.object(incidents_module, 'cursor', mock_cursor_cm):
+            client = TestClient(app)
+            response = client.get("/v1/incidents?limit=5000")
+            assert response.status_code == 200
+            assert response.json()["type"] == "FeatureCollection"
