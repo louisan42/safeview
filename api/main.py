@@ -12,12 +12,13 @@ from api.routers.incidents import router as incidents_router
 from api.routers.neighbourhoods import router as neighbourhoods_router
 from api.routers.stats import router as stats_router
 from api.sanitize import install_log_redaction
+from api.version import API_VERSION
 
 install_log_redaction()
 
 app = FastAPI(
     title="SafetyView API",
-    version="0.1.0",
+    version=API_VERSION,
     description=(
         "Open, city-agnostic crime and safety analytics API. "
         "Provides incidents, regions, and analytics endpoints (per-capita, hotspots, anomalies, safety index)."

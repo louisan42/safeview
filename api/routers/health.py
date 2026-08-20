@@ -1,8 +1,10 @@
 from fastapi import APIRouter
 
 from api.db import ping
+from api.version import public_build
 
 router = APIRouter(tags=["health"])
+
 
 @router.get("/health")
 async def health():
@@ -10,15 +12,16 @@ async def health():
     return {
         "ok": ok,
         "service": "api",
-        "version": "0.1.0",
+        **public_build(),
         "db": "up" if ok else "down",
     }
+
 
 @router.get("/meta")
 async def meta():
     return {
         "name": "SafetyView API",
-        "version": "0.1.0",
+        **public_build(),
         "city_agnostic": True,
         "endpoints": [
             "/v1/health",
