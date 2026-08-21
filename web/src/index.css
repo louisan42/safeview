@@ -152,14 +152,35 @@ input[type="date"] {
   color: var(--sv-muted);
 }
 
-.leaflet-control-attribution {
+.leaflet-control-attribution,
+.sv-map-stamp {
   background: var(--sv-overlay) !important;
   color: var(--sv-muted) !important;
   font-family: var(--font-ui);
   font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
   border: 1px solid var(--sv-line);
-  border-right: 0;
   border-bottom: 0;
+}
+
+.leaflet-control-attribution {
+  border-right: 0;
+}
+
+.sv-map-stamp {
+  margin: 0;
+  padding: 0 8px;
+  border-left: 1px solid var(--sv-line);
+  border-right: 1px solid var(--sv-line);
+  white-space: nowrap;
+}
+
+.sv-map-stamp-sep {
+  margin: 0 0.4em;
+  color: color-mix(in srgb, var(--sv-muted) 55%, transparent);
+  pointer-events: none;
+  user-select: none;
 }
 
 .leaflet-control-attribution a {

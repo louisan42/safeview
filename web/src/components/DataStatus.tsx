@@ -5,8 +5,6 @@ export type DataStatusProps = {
   appTitle?: string
   updatedLine: string | null
   tpsLine: string | null
-  lagNote: string | null
-  bordered?: boolean
 }
 
 function StatusSep() {
@@ -22,30 +20,25 @@ export const DataStatus: React.FC<DataStatusProps> = ({
   appTitle,
   updatedLine,
   tpsLine,
-  lagNote,
-  bordered = false,
 }) => {
   return (
-    <div className={bordered ? 'border-t border-sv-ink/10 pt-2' : undefined}>
-      <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm font-medium leading-snug text-sv-ink">
-        <span title={appTitle || `App ${sha}`}>
-          <span className="font-bold">App</span>{' '}
-          <span className="font-mono font-bold tabular-nums text-sv-accent">{sha}</span>
-        </span>
-        {updatedLine ? (
-          <>
-            <StatusSep />
-            <span>{updatedLine}</span>
-          </>
-        ) : null}
-        {tpsLine ? (
-          <>
-            <StatusSep />
-            <span>{tpsLine}</span>
-          </>
-        ) : null}
-      </p>
-      {lagNote ? <p className="mt-1 text-sm leading-snug text-sv-ink">{lagNote}</p> : null}
-    </div>
+    <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm font-medium leading-snug text-sv-ink">
+      <span title={appTitle || `App version ${sha}`}>
+        <span className="font-bold">App version:</span>{' '}
+        <span className="font-mono font-bold tabular-nums text-sv-accent">{sha}</span>
+      </span>
+      {updatedLine ? (
+        <>
+          <StatusSep />
+          <span>{updatedLine}</span>
+        </>
+      ) : null}
+      {tpsLine ? (
+        <>
+          <StatusSep />
+          <span>{tpsLine}</span>
+        </>
+      ) : null}
+    </p>
   )
 }

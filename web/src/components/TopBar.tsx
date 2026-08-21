@@ -3,7 +3,6 @@ import { DATASET_OPTIONS, timePresetLabel } from '../lib/labels'
 import type { DatasetKey, GeocodeHit, NeighbourhoodMatch, Scope, TimePreset } from '../lib/types'
 import { AddressSearch } from './AddressSearch'
 import { Chip } from './Chip'
-import { DataStatus } from './DataStatus'
 
 const PRESETS: TimePreset[] = ['7d', '30d', '90d']
 
@@ -25,10 +24,6 @@ type TopBarProps = {
   onCategory: (value: string | null) => void
   onLocate: (hit: GeocodeHit, neighbourhood: NeighbourhoodMatch | null) => void
   showing: { n: number; m: number; loading: boolean }
-  gitSha: string
-  appTitle?: string
-  updatedLine: string | null
-  tpsLine: string | null
   lagNote: string | null
 }
 
@@ -50,10 +45,6 @@ export const TopBar: React.FC<TopBarProps> = ({
   onCategory,
   onLocate,
   showing,
-  gitSha,
-  appTitle,
-  updatedLine,
-  tpsLine,
   lagNote,
 }) => {
   return (
@@ -110,14 +101,7 @@ export const TopBar: React.FC<TopBarProps> = ({
               </Chip>
             </div>
           </div>
-          <DataStatus
-            sha={gitSha}
-            appTitle={appTitle}
-            updatedLine={updatedLine}
-            tpsLine={tpsLine}
-            lagNote={lagNote}
-            bordered
-          />
+          {lagNote ? <p className="border-t border-sv-ink/10 pt-2 text-sm leading-snug text-sv-ink">{lagNote}</p> : null}
         </div>
         <div className="sv-panel relative z-10 flex flex-wrap items-center gap-2 rounded-md px-4 py-2.5">
           <div className="flex flex-wrap gap-1">

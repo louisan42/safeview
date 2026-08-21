@@ -16,6 +16,10 @@ export function formatUpdatedLine(lastEtlRunAt?: string | null): string | null {
   return day ? `Updated ${day}` : null
 }
 
+export function formatAppVersionLine(sha: string): string {
+  return `App version: ${sha}`
+}
+
 export function formatTpsThroughLine(maxReportDate?: string | null): string | null {
   const day = formatDay(maxReportDate)
   return day ? `TPS data through ${day}` : null
